@@ -45,7 +45,7 @@ func (i *DirectoryInode) InodeType() InodeType {
 // Parent obtains the DirectoryInode that is parent to this DirectoryInode
 func (i *DirectoryInode) Parent() *DirectoryInode {
 	i.rwMutex.RLock()
-	defer i.rwMutex.RLocker().Unlock()
+	defer i.rwMutex.RUnlock()
 	parentInode, parentExists := i.contents[ParentDirectoryEntry]
 	if !parentExists {
 		// This shouldn't happen, so we panic on the condition
@@ -100,33 +100,40 @@ func (i *DirectoryInode) AddDirectory(name string) (*DirectoryInode, error) {
 	defer i.rwMutex.Unlock()
 	// Disallow adding subdirectories on directories that have already been marked as deleted
 	if i.deleted {
-		return nil, fmt.Errorf("cannot add subdirectories to a directory marked for deletion")
+		return nil, fmt.Errorf("cannot add entries to a directory marked for deletion")
 	}
 	// Make sure that the entry doesn't already exist
 	if _, exists := i.contents[name]; exists {
-		return nil, fmt.Errorf("subdirectory entry '%s' already exists", name)
+		return nil, fmt.Errorf("directory entry '%s' already exists", name)
 	}
 	subdirInode := NewDirectoryInode(i)
 	i.contents[name] = subdirInode
 	return subdirInode, nil
 }
 
-// InodeEntry obtains the Inode corresponding to the named entry, or an error
-func (i *DirectoryInode) InodeEntry(entry string) (Inode, error) {
+// AddFile adds (and returns) a FileInode for a direct child file named 'name'.  It cannot create a
+// with a name containing the path separator and it cannot create a file whose name is already taken
+func (i *DirectoryInode) AddFile(name string) (*FileInode, error) {
 	// Check that this directory entry doesn't contain the path separator
-	if strings.Contains(entry, path.PathSeparator) {
-		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, path.PathSeparator)
+	if strings.Contains(name, path.PathSeparator) {
+		return nil, fmt.Errorf("cannot add file inode for a name containing path separator %s: %s", path.PathSeparator, name)
 	}
-	i.rwMutex.RLock()
-	defer i.rwMutex.RUnlock()
-	inode, exists := i.contents[entry]
-	if !exists {
-		return nil, fmt.Errorf("entry does not exist: '%s'", entry)
+	i.rwMutex.Lock()
+	defer i.rwMutex.Unlock()
+	// Disallow adding files to directories that have already been marked as deleted
+	if i.deleted {
+		return nil, fmt.Errorf("cannot add entries to a directory marked for deletion")
 	}
-	return inode, nil
+	// Make sure that the entry doesn't already exist
+	if _, exists := i.contents[name]; exists {
+		return nil, fmt.Errorf("directory entry '%s' already exists", name)
+	}
+	fileInode := NewFileInode()
+	i.contents[name] = fileInode
+	return fileInode, nil
 }
 
-// InodeEntry obtains the Inode corresponding to the named entry, or an error
+// DirectoryInodeEntry obtains the Inode corresponding to the named entry, or an error
 func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, error) {
 	// Check that this directory entry doesn't contain the path separator
 	if strings.Contains(entry, path.PathSeparator) {
@@ -148,6 +155,25 @@ func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, err
 		return nil, fmt.Errorf("entry '%s' does not exist", entry)
 	}
 	return dirInode, nil
+}
+
+// FileInodeEntry obtains the Inode corresponding to the named entry, or an error
+func (i *DirectoryInode) FileInodeEntry(entry string) (*FileInode, error) {
+	// Check that this entry doesn't contain the path separator
+	if strings.Contains(entry, path.PathSeparator) {
+		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, path.PathSeparator)
+	}
+	i.rwMutex.RLock()
+	defer i.rwMutex.RUnlock()
+	inode, exists := i.contents[entry]
+	if !exists {
+		return nil, fmt.Errorf("entry '%s' does not exist", entry)
+	}
+	fileInode, ok := inode.(*FileInode)
+	if !ok {
+		return nil, fmt.Errorf("entry '%s' is not a file", entry)
+	}
+	return fileInode, nil
 }
 
 type InodeEntry struct {
@@ -244,6 +270,23 @@ func (i *DirectoryInode) DeleteDirectory(entry string) error {
 		return errors.Wrapf(err, "failed to delete directory entry '%s'", entry)
 	}
 	// Finally, remove the entry
+	delete(i.contents, entry)
+	return nil
+}
+
+func (i *DirectoryInode) DeleteFile(entry string) error {
+	i.rwMutex.Lock()
+	defer i.rwMutex.Unlock()
+	// Get the FileInode for entry
+	inode, exists := i.contents[entry]
+	if !exists {
+		return fmt.Errorf("entry '%s' does not exist", entry)
+	}
+	_, ok := inode.(*FileInode)
+	if !ok {
+		return fmt.Errorf("entry '%s' is not a file", entry)
+	}
+	// Remove the entry
 	delete(i.contents, entry)
 	return nil
 }

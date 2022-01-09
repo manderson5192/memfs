@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/manderson5192/memfs/directory"
+	"github.com/manderson5192/memfs/file"
 	"github.com/manderson5192/memfs/filesys"
 	"github.com/manderson5192/memfs/path"
 	"github.com/pkg/errors"
@@ -24,6 +25,15 @@ type ProcessFilesystemContext interface {
 	// RemoveDirectory removes the specified directory.  Accepts absolute or relative paths.  Returns
 	// nil if successful, an error otherwise
 	RemoveDirectory(dir string) error
+	// CreateFile creates the specified file and returns a reference to it.  Accepts absolute or
+	// relative paths.  Returns nil and an error if unsuccessful
+	CreateFile(path string) (file.File, error)
+	// OpenFile opens the specified file and returns a reference to it.  Accepts absolute or
+	// relative paths.  Returns nil and an error if unsuccessful
+	OpenFile(path string) (file.File, error)
+	// DeleteFile deletes the specified file.  Accepts absolute or relative paths.  Returns an error
+	// if unsuccessful
+	DeleteFile(path string) error
 }
 
 type processContext struct {
@@ -89,6 +99,44 @@ func (p *processContext) RemoveDirectory(dir string) error {
 	}
 	if err := baseDir.Rmdir(dir); err != nil {
 		return errors.Wrapf(err, "could not remove directory '%s'", dir)
+	}
+	return nil
+}
+
+func (p *processContext) CreateFile(filePath string) (file.File, error) {
+	baseDir := p.workdir
+	if path.IsAbsolutePath(filePath) {
+		baseDir = p.fileSystem.RootDirectory()
+		filePath = strings.TrimLeft(filePath, path.PathSeparator)
+	}
+	f, err := baseDir.CreateFile(filePath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not create file '%s'", filePath)
+	}
+	return f, nil
+}
+
+func (p *processContext) OpenFile(filePath string) (file.File, error) {
+	baseDir := p.workdir
+	if path.IsAbsolutePath(filePath) {
+		baseDir = p.fileSystem.RootDirectory()
+		filePath = strings.TrimLeft(filePath, path.PathSeparator)
+	}
+	f, err := baseDir.OpenFile(filePath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not open file '%s'", filePath)
+	}
+	return f, nil
+}
+
+func (p *processContext) DeleteFile(filePath string) error {
+	baseDir := p.workdir
+	if path.IsAbsolutePath(filePath) {
+		baseDir = p.fileSystem.RootDirectory()
+		filePath = strings.TrimLeft(filePath, path.PathSeparator)
+	}
+	if err := baseDir.DeleteFile(filePath); err != nil {
+		return errors.Wrapf(err, "could not delete file '%s'", filePath)
 	}
 	return nil
 }

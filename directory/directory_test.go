@@ -196,6 +196,8 @@ func (s *DirectoryTestSuite) TestRmdir() {
 	assert.True(s.T(), parentOfC.Equals(s.BSubdir))
 	_, err = s.CSubdir.ReversePathLookup()
 	assert.NotNil(s.T(), err, "cannot do reverse path lookup on a deleted directory")
+	_, err = s.CSubdir.CreateFile("should_not_be_created2")
+	assert.NotNil(s.T(), err, "cannot create file in a deleted directory")
 }
 
 func (s *DirectoryTestSuite) TestRmdirNonEmptyDirectory() {
@@ -208,6 +210,43 @@ func (s *DirectoryTestSuite) TestRmdirSelf() {
 	assert.NotNil(s.T(), err, "cannot remove self directory entry")
 	err = s.CSubdir.Rmdir("..")
 	assert.NotNil(s.T(), err, "cannot remove parent directory entry")
+}
+
+func (s *DirectoryTestSuite) TestCreateOpenDeleteFile() {
+	// Open the file before it is created
+	file, err := s.CSubdir.OpenFile("a_file")
+	assert.Nil(s.T(), file)
+	assert.NotNil(s.T(), err)
+
+	// Create the file
+	file, err = s.CSubdir.CreateFile("a_file")
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), file)
+
+	// Open the file now that is has been created
+	sameFile, err := s.RootDir.OpenFile("a/b/c/a_file")
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), sameFile)
+	assert.True(s.T(), file.Equals(sameFile))
+
+	// Verify that the file was created
+	entries, err := s.CSubdir.ReadDir(".")
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), []directory.DirectoryEntry{{Name: "a_file", Type: directory.FileType}}, entries)
+
+	// Delete the file
+	err = s.CSubdir.DeleteFile("a_file")
+	assert.Nil(s.T(), err)
+
+	// Verify that the file was deleted
+	entries, err = s.CSubdir.ReadDir(".")
+	assert.Nil(s.T(), err)
+	assert.Empty(s.T(), entries)
+}
+
+func (s *DirectoryTestSuite) TestDeleteFileOnDirectory() {
+	err := s.RootDir.DeleteFile("a/b")
+	assert.NotNil(s.T(), err)
 }
 
 func TestDirectoryTestSuite(t *testing.T) {

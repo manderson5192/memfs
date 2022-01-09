@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/manderson5192/memfs/file"
 	"github.com/manderson5192/memfs/inode"
 	"github.com/manderson5192/memfs/path"
 	"github.com/manderson5192/memfs/utils"
@@ -56,8 +57,15 @@ type Directory interface {
 	// directory, or returns an error.  It will return an error if a path component does not exist
 	// or is not a directory.
 	ReadDir(subdirectory string) ([]DirectoryEntry, error)
-	// Rmdir removes a the specified subdirectory of the current directory, or returns an error
+	// Rmdir removes the specified subdirectory of the current directory, or returns an error
 	Rmdir(subdirectory string) error
+	// CreateFile creates a new file at the specified relative path, or returns an error
+	CreateFile(relativePath string) (file.File, error)
+	// OpenFile returns a reference to the file at the specified relative path, or returns an error
+	OpenFile(relativePath string) (file.File, error)
+	// DeleteFile removes the specified file, which must be at a path relative to the current
+	// directory.  It returns an error if it is unsuccessful
+	DeleteFile(relativePath string) error
 }
 
 type directory struct {
@@ -179,6 +187,83 @@ func (d *directory) Rmdir(subdirectory string) error {
 	// Remove the directory
 	if err := subdirInode.DeleteDirectory(dirNameToDelete); err != nil {
 		return errors.Wrapf(err, "could not delete '%s'", subdirectory)
+	}
+	return nil
+}
+
+func (d *directory) CreateFile(relativePath string) (file.File, error) {
+	// Validate that the path is relative and non-empty
+	if relativePath == "" {
+		return nil, fmt.Errorf("no path provided")
+	}
+	if !path.IsRelativePath(relativePath) {
+		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
+	}
+	// Lookup the directory that will be parent to the file
+	subdirNameToLookup, fileToCreate, found := utils.RightCut(relativePath, path.PathSeparator)
+	subdirInode := d.DirectoryInode
+	if found {
+		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not create %s", relativePath)
+		}
+		subdirInode = dirInode
+	}
+	// Create the file
+	newFileInode, err := subdirInode.AddFile(fileToCreate)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not create %s", relativePath)
+	}
+	return file.NewFile(newFileInode), nil
+}
+
+func (d *directory) OpenFile(relativePath string) (file.File, error) {
+	// Validate that the path is relative and non-empty
+	if relativePath == "" {
+		return nil, fmt.Errorf("no path provided")
+	}
+	if !path.IsRelativePath(relativePath) {
+		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
+	}
+	// Lookup the directory that is parent to the file
+	subdirNameToLookup, filename, found := utils.RightCut(relativePath, path.PathSeparator)
+	subdirInode := d.DirectoryInode
+	if found {
+		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not open %s", relativePath)
+		}
+		subdirInode = dirInode
+	}
+	// Get the file
+	fileInode, err := subdirInode.FileInodeEntry(filename)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not open %s", relativePath)
+	}
+	return file.NewFile(fileInode), nil
+}
+
+func (d *directory) DeleteFile(relativePath string) error {
+	// Validate that the path is relative and non-empty
+	if relativePath == "" {
+		return fmt.Errorf("no path provided")
+	}
+	if !path.IsRelativePath(relativePath) {
+		return fmt.Errorf("'%s' is not a relative path", relativePath)
+	}
+	// Lookup the directory from which the named subdirectory will be removed
+	subdirNameToLookup, fileToDelete, found := utils.RightCut(relativePath, path.PathSeparator)
+	subdirInode := d.DirectoryInode
+	if found {
+		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
+		if err != nil {
+			return errors.Wrapf(err, "could not delete '%s'", relativePath)
+		}
+		subdirInode = dirInode
+	}
+	// Remove the file
+	if err := subdirInode.DeleteFile(fileToDelete); err != nil {
+		return errors.Wrapf(err, "could not delete '%s'", relativePath)
 	}
 	return nil
 }
