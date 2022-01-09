@@ -21,6 +21,9 @@ type ProcessFilesystemContext interface {
 	// ListDirectory returns an array of DirectoryEntry in the specified directory.  Accepts
 	// absolute or relative path names.  Returns an array if successful, an error otherwise
 	ListDirectory(dir string) ([]directory.DirectoryEntry, error)
+	// RemoveDirectory removes the specified directory.  Accepts absolute or relative paths.  Returns
+	// nil if successful, an error otherwise
+	RemoveDirectory(dir string) error
 }
 
 type processContext struct {
@@ -45,7 +48,7 @@ func (p *processContext) ChangeDirectory(dir string) error {
 		baseDir = p.fileSystem.RootDirectory()
 		dir = strings.TrimLeft(dir, path.PathSeparator)
 	}
-	newDir, lookupErr := baseDir.Lookup(dir)
+	newDir, lookupErr := baseDir.LookupSubdirectory(dir)
 	if lookupErr != nil {
 		return errors.Wrapf(lookupErr, "could not change directories")
 	}
@@ -76,4 +79,16 @@ func (p *processContext) ListDirectory(dir string) ([]directory.DirectoryEntry, 
 		return nil, errors.Wrapf(err, "could not list entries in directory '%s'", dir)
 	}
 	return entries, nil
+}
+
+func (p *processContext) RemoveDirectory(dir string) error {
+	baseDir := p.workdir
+	if path.IsAbsolutePath(dir) {
+		baseDir = p.fileSystem.RootDirectory()
+		dir = strings.TrimLeft(dir, path.PathSeparator)
+	}
+	if err := baseDir.Rmdir(dir); err != nil {
+		return errors.Wrapf(err, "could not remove directory '%s'", dir)
+	}
+	return nil
 }

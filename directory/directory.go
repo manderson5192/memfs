@@ -46,8 +46,8 @@ type Directory interface {
 	Equals(other Directory) bool
 	// ReversePathLookup returns a valid absolute path for the directory or an error
 	ReversePathLookup() (string, error)
-	// Lookup returns the Directory for the subdirectory of the current directory or an error
-	Lookup(subdirectory string) (Directory, error)
+	// LookupSubdirectory returns the Directory for the subdirectory of the current directory or an error
+	LookupSubdirectory(subdirectory string) (Directory, error)
 	// Mkdir creates and returns a Directory for the specified subdirectory of the current
 	// directory, or returns an error.  It will return an error if a path component does not exist
 	// or is not a directory.  It will return an error if the specified subdirectory already exists.
@@ -56,6 +56,8 @@ type Directory interface {
 	// directory, or returns an error.  It will return an error if a path component does not exist
 	// or is not a directory.
 	ReadDir(subdirectory string) ([]DirectoryEntry, error)
+	// Rmdir removes a the specified subdirectory of the current directory, or returns an error
+	Rmdir(subdirectory string) error
 }
 
 type directory struct {
@@ -96,12 +98,12 @@ func (d *directory) ReversePathLookup() (string, error) {
 	return "/" + path, nil
 }
 
-// Lookup will return a directory for the specified subdirectory relative to this directory.  It
-// assumes that subdirectory is a relative path, even if it begins with a path separator character.
-// If the specified subdirectory can't be found, or if any named directory entry along its path is
-// not a directory (e.g. if it is a file), then it will return an error
-func (d *directory) Lookup(subdirectory string) (Directory, error) {
-	subdirInode, err := d.DirectoryInode.Lookup(subdirectory)
+// LookupSubdirectory will return a directory for the specified subdirectory relative to this
+// directory.  It assumes that subdirectory is a relative path, even if it begins with a path
+// separator character.  If the specified subdirectory can't be found, or if any named directory
+// entry along its path is not a directory (e.g. if it is a file), then it will return an error
+func (d *directory) LookupSubdirectory(subdirectory string) (Directory, error) {
+	subdirInode, err := d.DirectoryInode.LookupSubdirectory(subdirectory)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +111,10 @@ func (d *directory) Lookup(subdirectory string) (Directory, error) {
 }
 
 func (d *directory) Mkdir(subdirectory string) (Directory, error) {
-	// Validate that the path is relative
+	// Validate that the path is relative and non-empty
+	if subdirectory == "" {
+		return nil, fmt.Errorf("no subdirectory provided")
+	}
 	if !path.IsRelativePath(subdirectory) {
 		return nil, fmt.Errorf("'%s' is not a relative path", subdirectory)
 	}
@@ -117,7 +122,7 @@ func (d *directory) Mkdir(subdirectory string) (Directory, error) {
 	subdirNameToLookup, dirNameToCreate, found := utils.RightCut(subdirectory, path.PathSeparator)
 	subdirInode := d.DirectoryInode
 	if found {
-		dirInode, err := d.DirectoryInode.Lookup(subdirNameToLookup)
+		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
 		if err != nil {
 			return nil, errors.Wrapf(err, "could not create %s", subdirectory)
 		}
@@ -137,12 +142,12 @@ func (d *directory) ReadDir(subdirectory string) ([]DirectoryEntry, error) {
 		return nil, fmt.Errorf("'%s' is not a relative path", subdirectory)
 	}
 	// Lookup the DirectoryInode for the subdirectory
-	dirInode, err := d.DirectoryInode.Lookup(subdirectory)
+	dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirectory)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not list entries in '%s'", subdirectory)
 	}
 	// Get the directory inode entries
-	inodeEntries := dirInode.DirectoryEntries()
+	inodeEntries := dirInode.InodeEntries()
 	toReturn := make([]DirectoryEntry, 0, len(inodeEntries))
 	for _, entry := range inodeEntries {
 		toReturn = append(toReturn, DirectoryEntry{
@@ -151,4 +156,29 @@ func (d *directory) ReadDir(subdirectory string) ([]DirectoryEntry, error) {
 		})
 	}
 	return toReturn, nil
+}
+
+func (d *directory) Rmdir(subdirectory string) error {
+	// Validate that the path is relative and non-empty
+	if subdirectory == "" {
+		return fmt.Errorf("no subdirectory provided")
+	}
+	if !path.IsRelativePath(subdirectory) {
+		return fmt.Errorf("'%s' is not a relative path", subdirectory)
+	}
+	// Lookup the directory from which the named subdirectory will be removed
+	subdirNameToLookup, dirNameToDelete, found := utils.RightCut(subdirectory, path.PathSeparator)
+	subdirInode := d.DirectoryInode
+	if found {
+		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
+		if err != nil {
+			return errors.Wrapf(err, "could not delete '%s'", subdirectory)
+		}
+		subdirInode = dirInode
+	}
+	// Remove the directory
+	if err := subdirInode.DeleteDirectory(dirNameToDelete); err != nil {
+		return errors.Wrapf(err, "could not delete '%s'", subdirectory)
+	}
+	return nil
 }

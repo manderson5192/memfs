@@ -16,6 +16,7 @@ const (
 
 type DirectoryInode struct {
 	basicInode
+	deleted  bool
 	contents map[string]Inode
 }
 
@@ -97,6 +98,10 @@ func (i *DirectoryInode) AddDirectory(name string) (*DirectoryInode, error) {
 	}
 	i.rwMutex.Lock()
 	defer i.rwMutex.Unlock()
+	// Disallow adding subdirectories on directories that have already been marked as deleted
+	if i.deleted {
+		return nil, fmt.Errorf("cannot add subdirectories to a directory marked for deletion")
+	}
 	// Make sure that the entry doesn't already exist
 	if _, exists := i.contents[name]; exists {
 		return nil, fmt.Errorf("subdirectory entry '%s' already exists", name)
@@ -106,8 +111,8 @@ func (i *DirectoryInode) AddDirectory(name string) (*DirectoryInode, error) {
 	return subdirInode, nil
 }
 
-// DirectoryEntry obtains the Inode corresponding to the named entry, or an error
-func (i *DirectoryInode) DirectoryEntry(entry string) (Inode, error) {
+// InodeEntry obtains the Inode corresponding to the named entry, or an error
+func (i *DirectoryInode) InodeEntry(entry string) (Inode, error) {
 	// Check that this directory entry doesn't contain the path separator
 	if strings.Contains(entry, path.PathSeparator) {
 		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, path.PathSeparator)
@@ -121,20 +126,44 @@ func (i *DirectoryInode) DirectoryEntry(entry string) (Inode, error) {
 	return inode, nil
 }
 
-type DirectoryInodeEntry struct {
+// InodeEntry obtains the Inode corresponding to the named entry, or an error
+func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, error) {
+	// Check that this directory entry doesn't contain the path separator
+	if strings.Contains(entry, path.PathSeparator) {
+		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, path.PathSeparator)
+	}
+	i.rwMutex.RLock()
+	defer i.rwMutex.RUnlock()
+	inode, exists := i.contents[entry]
+	if !exists {
+		return nil, fmt.Errorf("entry '%s' does not exist", entry)
+	}
+	dirInode, ok := inode.(*DirectoryInode)
+	if !ok {
+		return nil, fmt.Errorf("entry '%s' is not a directory", entry)
+	}
+	// Deny access to DirectoryInodes after they have been marked as deleted.  This case should be
+	// rare, but is technically possible
+	if dirInode.isDeleted() {
+		return nil, fmt.Errorf("entry '%s' does not exist", entry)
+	}
+	return dirInode, nil
+}
+
+type InodeEntry struct {
 	Name string
 	Type InodeType
 }
 
-func (i *DirectoryInode) DirectoryEntries() []DirectoryInodeEntry {
+func (i *DirectoryInode) InodeEntries() []InodeEntry {
 	i.rwMutex.RLock()
 	defer i.rwMutex.RUnlock()
-	toReturn := make([]DirectoryInodeEntry, 0, len(i.contents))
+	toReturn := make([]InodeEntry, 0, len(i.contents))
 	for entryName, inode := range i.contents {
 		if entryName == SelfDirectoryEntry || entryName == ParentDirectoryEntry {
 			continue
 		}
-		toReturn = append(toReturn, DirectoryInodeEntry{
+		toReturn = append(toReturn, InodeEntry{
 			Name: entryName,
 			Type: inode.InodeType(),
 		})
@@ -146,7 +175,7 @@ func (i *DirectoryInode) DirectoryEntries() []DirectoryInodeEntry {
 // DirectoryInode.  It assumes that subdirectory is a relative path, even if it begins with a path
 // separator character.  If the specified subdirectory can't be found, or if any named directory
 // entry along its path is not a directory (e.g. if it is a file), then it will return an error
-func (i *DirectoryInode) Lookup(subdirectory string) (*DirectoryInode, error) {
+func (i *DirectoryInode) LookupSubdirectory(subdirectory string) (*DirectoryInode, error) {
 	if !path.IsRelativePath(subdirectory) {
 		return nil, fmt.Errorf("'%s' is not a relative path", subdirectory)
 	}
@@ -157,17 +186,64 @@ func (i *DirectoryInode) Lookup(subdirectory string) (*DirectoryInode, error) {
 		currentSubdirectory = strings.TrimLeft(currentSubdirectory, path.PathSeparator)
 		entryName, remainder, _ := utils.Cut(currentSubdirectory, path.PathSeparator)
 		// Get the directory inode for this entry
-		inode, getEntryErr := currentDirInode.DirectoryEntry(entryName)
+		dirInode, getEntryErr := currentDirInode.DirectoryInodeEntry(entryName)
 		if getEntryErr != nil {
-			return nil, errors.Wrapf(getEntryErr, "subdirectory '%s' does not exist", subdirectory)
-		}
-		dirInode, ok := inode.(*DirectoryInode)
-		if !ok {
-			return nil, fmt.Errorf("subdirectory %s not found: %s is not a directory", subdirectory, entryName)
+			return nil, errors.Wrapf(getEntryErr, "cannot find subdirectory '%s'", subdirectory)
 		}
 		// iterate
 		currentDirInode = dirInode
 		currentSubdirectory = remainder
 	}
 	return currentDirInode, nil
+}
+
+// delete marks this DirectoryInode as deleted.  It will only succeed if this directory is empty.
+func (i *DirectoryInode) delete() error {
+	i.rwMutex.Lock()
+	defer i.rwMutex.Unlock()
+	// Check: is the directory already deleted?
+	if i.deleted {
+		return nil
+	}
+	// Check: is the directory empty?
+	for entry, _ := range i.contents {
+		if entry == SelfDirectoryEntry || entry == ParentDirectoryEntry {
+			continue
+		}
+		return fmt.Errorf("directory is not empty")
+	}
+	// mark as deleted
+	i.deleted = true
+	return nil
+}
+
+func (i *DirectoryInode) isDeleted() bool {
+	i.rwMutex.RLock()
+	defer i.rwMutex.RUnlock()
+	return i.deleted
+}
+
+func (i *DirectoryInode) DeleteDirectory(entry string) error {
+	// Check: disallow removing the special "." and ".." directories
+	if entry == "." || entry == ".." {
+		return fmt.Errorf("refusing to remove '.' or '..' directory: skipping '%s", entry)
+	}
+	i.rwMutex.Lock()
+	defer i.rwMutex.Unlock()
+	// Get the DirectoryInode for entry
+	inode, exists := i.contents[entry]
+	if !exists {
+		return fmt.Errorf("entry '%s' does not exist", entry)
+	}
+	dirInode, ok := inode.(*DirectoryInode)
+	if !ok {
+		return fmt.Errorf("entry '%s' is not a directory", entry)
+	}
+	// Make sure we can successfully delete entry's directory
+	if err := dirInode.delete(); err != nil {
+		return errors.Wrapf(err, "failed to delete directory entry '%s'", entry)
+	}
+	// Finally, remove the entry
+	delete(i.contents, entry)
+	return nil
 }

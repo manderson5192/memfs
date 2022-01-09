@@ -79,33 +79,33 @@ func (s *DirectoryTestSuite) TestReversePathLookup() {
 }
 
 func (s *DirectoryTestSuite) TestLookupSelf() {
-	rootLookedUpSelf, err := s.RootDir.Lookup(directory.SelfDirectoryEntry)
+	rootLookedUpSelf, err := s.RootDir.LookupSubdirectory(directory.SelfDirectoryEntry)
 	assert.Nil(s.T(), err, "able to look up self dir entry for root dir")
 	assert.True(s.T(), rootLookedUpSelf.Equals(s.RootDir))
 
-	aLookedUpSelf, err := s.ASubdir.Lookup(directory.SelfDirectoryEntry)
+	aLookedUpSelf, err := s.ASubdir.LookupSubdirectory(directory.SelfDirectoryEntry)
 	assert.Nil(s.T(), err, "able to look up self dir entry for 'a' subdir")
 	assert.True(s.T(), aLookedUpSelf.Equals(s.ASubdir))
 }
 
 func (s *DirectoryTestSuite) TestLookupParent() {
-	rootLookedUp, err := s.ASubdir.Lookup(directory.ParentDirectoryEntry)
+	rootLookedUp, err := s.ASubdir.LookupSubdirectory(directory.ParentDirectoryEntry)
 	assert.Nil(s.T(), err, "able to look up parent (root) directory of 'a' subdir")
 	assert.True(s.T(), rootLookedUp.Equals(s.RootDir))
 
-	rootLookedUp, err = s.RootDir.Lookup("../../..")
+	rootLookedUp, err = s.RootDir.LookupSubdirectory("../../..")
 	assert.Nil(s.T(), err, "able to look up parent of root (still root)")
 	assert.True(s.T(), s.RootDir.Equals(rootLookedUp))
 }
 
 func (s *DirectoryTestSuite) TestLookupConvolutedPath() {
-	lookedUp, err := s.BSubdir.Lookup("..////////..///a/b/c///////../../b")
+	lookedUp, err := s.BSubdir.LookupSubdirectory("..////////..///a/b/c///////../../b")
 	assert.Nil(s.T(), err, "able to look up convoluted (but valid) path")
 	assert.True(s.T(), s.BSubdir.Equals(lookedUp))
 }
 
 func (s *DirectoryTestSuite) TestLookupInvalidPath() {
-	_, err := s.CSubdir.Lookup("this/path/does/not/exist")
+	_, err := s.CSubdir.LookupSubdirectory("this/path/does/not/exist")
 	assert.NotNil(s.T(), err)
 }
 
@@ -144,7 +144,7 @@ func (s *DirectoryTestSuite) TestMkdirInvalidPath() {
 }
 
 func (s *DirectoryTestSuite) TestReadDirOnRoot() {
-	entries, err := s.RootDir.ReadDir(".")
+	entries, err := s.RootDir.ReadDir(directory.SelfDirectoryEntry)
 	assert.Nil(s.T(), err)
 	assert.ElementsMatch(s.T(), []directory.DirectoryEntry{
 		{
@@ -171,6 +171,43 @@ func (s *DirectoryTestSuite) TestReadDirOnASubdir() {
 			Type: directory.DirectoryType,
 		},
 	}, entries)
+}
+
+func (s *DirectoryTestSuite) TestRmdir() {
+	// Verify that /a/b has two entries in it
+	entries, err := s.BSubdir.ReadDir(directory.SelfDirectoryEntry)
+	assert.Nil(s.T(), err)
+	assert.Len(s.T(), entries, 2)
+
+	// Remove 'c' subdir from /a/b
+	err = s.BSubdir.Rmdir("c")
+	assert.Nil(s.T(), err)
+
+	// Verify that /a/b now has one entry for 'foobar'
+	entries, err = s.BSubdir.ReadDir(directory.SelfDirectoryEntry)
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), []directory.DirectoryEntry{{Name: "foobar", Type: directory.DirectoryType}}, entries)
+
+	// Verify behavior of our reference to 'c', since we can still make calls on it
+	_, err = s.CSubdir.Mkdir("should_not_be_created")
+	assert.NotNil(s.T(), err, "cannot create subdirectories of a deleted directory")
+	parentOfC, err := s.CSubdir.LookupSubdirectory(directory.ParentDirectoryEntry)
+	assert.Nil(s.T(), err, "can look up parent directory of a deleted directory")
+	assert.True(s.T(), parentOfC.Equals(s.BSubdir))
+	_, err = s.CSubdir.ReversePathLookup()
+	assert.NotNil(s.T(), err, "cannot do reverse path lookup on a deleted directory")
+}
+
+func (s *DirectoryTestSuite) TestRmdirNonEmptyDirectory() {
+	err := s.ASubdir.Rmdir("b")
+	assert.NotNil(s.T(), err, "cannot remove non-empty directory 'b' from /a")
+}
+
+func (s *DirectoryTestSuite) TestRmdirSelf() {
+	err := s.CSubdir.Rmdir(".")
+	assert.NotNil(s.T(), err, "cannot remove self directory entry")
+	err = s.CSubdir.Rmdir("..")
+	assert.NotNil(s.T(), err, "cannot remove parent directory entry")
 }
 
 func TestDirectoryTestSuite(t *testing.T) {
