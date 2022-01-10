@@ -249,13 +249,13 @@ func (i *DirectoryInode) isDeleted() bool {
 	return i.deleted
 }
 
-func (i *DirectoryInode) DeleteDirectory(entry string) error {
+// this function is **not thread safe**.  It should only be invoked when a Write-level lock is held
+// on the DirectoryInode
+func (i *DirectoryInode) doDeleteDirectory(entry string) error {
 	// Check: disallow removing the special "." and ".." directories
 	if entry == "." || entry == ".." {
 		return fmt.Errorf("refusing to remove '.' or '..' directory: skipping '%s", entry)
 	}
-	i.rwMutex.Lock()
-	defer i.rwMutex.Unlock()
 	// Get the DirectoryInode for entry
 	inode, exists := i.contents[entry]
 	if !exists {
@@ -274,9 +274,15 @@ func (i *DirectoryInode) DeleteDirectory(entry string) error {
 	return nil
 }
 
-func (i *DirectoryInode) DeleteFile(entry string) error {
+func (i *DirectoryInode) DeleteDirectory(entry string) error {
 	i.rwMutex.Lock()
 	defer i.rwMutex.Unlock()
+	return i.doDeleteDirectory(entry)
+}
+
+// this function is **not thread safe**.  It should only be invoked when a Write-level lock is held
+// on the DirectoryInode
+func (i *DirectoryInode) doDeleteFile(entry string) error {
 	// Get the FileInode for entry
 	inode, exists := i.contents[entry]
 	if !exists {
@@ -288,5 +294,149 @@ func (i *DirectoryInode) DeleteFile(entry string) error {
 	}
 	// Remove the entry
 	delete(i.contents, entry)
+	return nil
+}
+
+func (i *DirectoryInode) DeleteFile(entry string) error {
+	i.rwMutex.Lock()
+	defer i.rwMutex.Unlock()
+	return i.doDeleteFile(entry)
+}
+
+// this function is **not thread safe**.  It should only be invoked when a Write-level lock is held
+// on the DirectoryInode
+func (i *DirectoryInode) doInsertFileInode(entry string, newEntry *FileInode) error {
+	// if an entry by this name already exists, then we are meant to delete it
+	if oldEntry, exists := i.contents[entry]; exists {
+		switch oldEntry.(type) {
+		case *FileInode:
+			if err := i.doDeleteFile(entry); err != nil {
+				return errors.Wrapf(err, "failed to delete existing file")
+			}
+		case *DirectoryInode:
+			if err := i.doDeleteDirectory(entry); err != nil {
+				return errors.Wrapf(err, "failed to delete existing directory")
+			}
+		default:
+			return fmt.Errorf("existing entry '%s' has malformed inode of type '%s'", entry, oldEntry.InodeType().String())
+		}
+	}
+	i.contents[entry] = newEntry
+	return nil
+}
+
+// this function is **not thread safe**.  It should only be invoked when a Write-level lock is held
+// on the DirectoryInode
+func (i *DirectoryInode) doInsertDirectoryInode(entry string, newEntry *DirectoryInode) error {
+	// if an entry by this name already exists, then we are meant to delete it
+	if oldEntry, exists := i.contents[entry]; exists {
+		switch oldEntry.(type) {
+		case *FileInode:
+			// Interestingly, the POSIX spec says that rename(2) should return an error (EISDIR)
+			// if the source ("old") path specifies a directory but the destination ("new") path
+			// coincides with a file.  We could do that here, but it doesn't seem strictly
+			// necessary, so we will allow it.
+			if err := i.doDeleteFile(entry); err != nil {
+				return errors.Wrapf(err, "failed to delete existing file")
+			}
+		case *DirectoryInode:
+			if err := i.doDeleteDirectory(entry); err != nil {
+				return errors.Wrapf(err, "failed to delete existing directory")
+			}
+		default:
+			return fmt.Errorf("existing entry '%s' has malformed inode of type '%s'", entry, oldEntry.InodeType().String())
+		}
+	}
+	// insert the entry into this directory
+	i.contents[entry] = newEntry
+	// update the newEntry inode's parent pointer to point to this inode
+	newEntry.SetParent(i)
+	return nil
+}
+
+func (i *DirectoryInode) SetParent(parent *DirectoryInode) {
+	i.rwMutex.Lock()
+	defer i.rwMutex.Unlock()
+	i.contents[ParentDirectoryEntry] = parent
+}
+
+func MoveEntry(srcParentInode, dstParentInode *DirectoryInode, srcEntry, dstEntry string) error {
+	// Check that srcEntry is not the special self or parent directory entries
+	if srcEntry == SelfDirectoryEntry || srcEntry == ParentDirectoryEntry {
+		return fmt.Errorf("cannot move '.' or '..' entries")
+	}
+	// Check the same for dstEntry
+	if dstEntry == SelfDirectoryEntry || dstEntry == ParentDirectoryEntry {
+		return fmt.Errorf("cannot overwrite '.' or '..' entries")
+	}
+	// Check that the dst entry name doesn't contain the path separator
+	if strings.Contains(dstEntry, filepath.PathSeparator) {
+		return fmt.Errorf("entry name '%s' contains the path separator", dstEntry)
+	}
+	// Edge case: srcParentInode and dstParentInode are the same.  That requires a different locking
+	// discipline, so we special-case it
+	if srcParentInode == dstParentInode {
+		return srcParentInode.renameEntry(srcEntry, dstEntry)
+	}
+	srcParentInode.rwMutex.Lock()
+	defer srcParentInode.rwMutex.Unlock()
+	dstParentInode.rwMutex.Lock()
+	defer dstParentInode.rwMutex.Unlock()
+	// Disallow adding files to directories that have already been marked as deleted
+	if dstParentInode.deleted {
+		return fmt.Errorf("cannot add entries to a directory marked for deletion")
+	}
+	// Get the inode for the srcEntry
+	srcInode, exists := srcParentInode.contents[srcEntry]
+	if !exists {
+		return fmt.Errorf("source entry '%s' does not exist", srcEntry)
+	}
+	// Insert the inode into its new location
+	switch srcInodeTyped := srcInode.(type) {
+	case *FileInode:
+		if err := dstParentInode.doInsertFileInode(dstEntry, srcInodeTyped); err != nil {
+			return err
+		}
+	case *DirectoryInode:
+		if err := dstParentInode.doInsertDirectoryInode(dstEntry, srcInodeTyped); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("source entry '%s' has malformed inode of type '%s'", srcEntry, srcInode.InodeType().String())
+	}
+	// Remove the inode from its old location
+	delete(srcParentInode.contents, srcEntry)
+	return nil
+}
+
+func (i *DirectoryInode) renameEntry(srcEntry, dstEntry string) error {
+	// Special case: do nothing
+	if srcEntry == dstEntry {
+		return nil
+	}
+	i.rwMutex.Lock()
+	defer i.rwMutex.Unlock()
+	// Disallow moving files in directories that have already been marked as deleted
+	if i.deleted {
+		return fmt.Errorf("cannot move entries in a directory marked for deletion")
+	}
+	// Get the inode to be moved
+	inode, exists := i.contents[srcEntry]
+	if !exists {
+		return fmt.Errorf("source entry '%s' does not exist", srcEntry)
+	}
+	switch inodeTyped := inode.(type) {
+	case *FileInode:
+		if err := i.doInsertFileInode(dstEntry, inodeTyped); err != nil {
+			return err
+		}
+	case *DirectoryInode:
+		if err := i.doInsertDirectoryInode(dstEntry, inodeTyped); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("source entry '%s' has malformed inode of type '%s'", srcEntry, inodeTyped.InodeType().String())
+	}
+	delete(i.contents, srcEntry)
 	return nil
 }

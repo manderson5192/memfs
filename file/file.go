@@ -82,13 +82,10 @@ func (f *file) Seek(offset int64, whence int) (int64, error) {
 	// interpret whence
 	switch whence {
 	case io.SeekStart:
-		break
 	case io.SeekCurrent:
 		offset = f.offset + offset
-		break
 	case io.SeekEnd:
 		offset = int64(f.Size()) + offset
-		break
 	default:
 		return f.offset, fmt.Errorf("invalid whence value %d", whence)
 	}

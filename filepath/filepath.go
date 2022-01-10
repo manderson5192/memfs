@@ -15,3 +15,7 @@ func IsAbsolutePath(path string) bool {
 func IsRelativePath(path string) bool {
 	return !IsAbsolutePath(path)
 }
+
+func Join(base, relative string) string {
+	return strings.Join([]string{base, relative}, PathSeparator)
+}

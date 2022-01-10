@@ -66,6 +66,10 @@ type Directory interface {
 	// DeleteFile removes the specified file, which must be at a path relative to the current
 	// directory.  It returns an error if it is unsuccessful
 	DeleteFile(relativePath string) error
+	// Rename moves the file or directory at the specified relative src path to the specified
+	// relative dst path.  If an entry already exists at the dst path, then this operation will
+	// attempt to atomically replace it.  Returns an error if unsuccessful
+	Rename(srcPath, dstPath string) error
 }
 
 type directory struct {
@@ -92,7 +96,6 @@ func (d *directory) Equals(other Directory) bool {
 func (d *directory) ReversePathLookup() (string, error) {
 	pathParts := []string{}
 	currentDirInode := d.DirectoryInode
-	// TODO: what if currentDirInode is deleted?  Is that even possible?
 	for !currentDirInode.IsRootDirectoryInode() {
 		parentDirInode := currentDirInode.Parent()
 		pathPart, err := parentDirInode.ReverseLookupEntry(currentDirInode)
@@ -264,6 +267,47 @@ func (d *directory) DeleteFile(relativePath string) error {
 	// Remove the file
 	if err := subdirInode.DeleteFile(fileToDelete); err != nil {
 		return errors.Wrapf(err, "could not delete '%s'", relativePath)
+	}
+	return nil
+}
+
+func (d *directory) Rename(srcRelativePath, dstRelativePath string) error {
+	// Validate that both paths are relative and non-empty
+	if srcRelativePath == "" {
+		return fmt.Errorf("no source path provided")
+	}
+	if !filepath.IsRelativePath(srcRelativePath) {
+		return fmt.Errorf("'%s' is not a relative path", srcRelativePath)
+	}
+	if dstRelativePath == "" {
+		return fmt.Errorf("no destination path provided")
+	}
+	if !filepath.IsRelativePath(dstRelativePath) {
+		return fmt.Errorf("'%s' is not a relative path", dstRelativePath)
+	}
+	// Parse the parent directory and entry name from srcRelativePath
+	srcDirToLookup, srcEntryToMove, found := utils.RightCut(srcRelativePath, filepath.PathSeparator)
+	srcDirInode := d.DirectoryInode
+	if found {
+		dirInode, err := d.DirectoryInode.LookupSubdirectory(srcDirToLookup)
+		if err != nil {
+			return errors.Wrapf(err, "could not rename '%s' to '%s'", srcRelativePath, dstRelativePath)
+		}
+		srcDirInode = dirInode
+	}
+	// ...now do the same for dstRelativePath
+	dstDirToLookup, dstEntryToMove, found := utils.RightCut(dstRelativePath, filepath.PathSeparator)
+	dstDirInode := d.DirectoryInode
+	if found {
+		dirInode, err := d.DirectoryInode.LookupSubdirectory(dstDirToLookup)
+		if err != nil {
+			return errors.Wrapf(err, "could not rename '%s' to '%s'", srcRelativePath, dstRelativePath)
+		}
+		dstDirInode = dirInode
+	}
+	// Move the entry
+	if err := inode.MoveEntry(srcDirInode, dstDirInode, srcEntryToMove, dstEntryToMove); err != nil {
+		return errors.Wrapf(err, "could not rename '%s' to '%s'", srcRelativePath, dstRelativePath)
 	}
 	return nil
 }

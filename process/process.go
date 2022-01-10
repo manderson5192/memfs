@@ -125,3 +125,32 @@ func (p *processContext) DeleteFile(path string) error {
 	}
 	return nil
 }
+
+func (p *processContext) Rename(srcPath, dstPath string) error {
+	// If one path is relative but the other is absolute, then use the working directory to make
+	// the relative path into an absolute one.
+	baseDir := p.workdir
+	if filepath.IsAbsolutePath(srcPath) && filepath.IsAbsolutePath(dstPath) {
+		baseDir = p.fileSystem.RootDirectory()
+		srcPath = strings.TrimLeft(srcPath, filepath.PathSeparator)
+		dstPath = strings.TrimLeft(dstPath, filepath.PathSeparator)
+	} else if filepath.IsAbsolutePath(srcPath) != filepath.IsAbsolutePath(dstPath) {
+		// Convert both paths to be absolute
+		baseDir = p.fileSystem.RootDirectory()
+		workdir, err := p.WorkingDirectory()
+		if err != nil {
+			return errors.Wrapf(err, "unable to rename %s to %s", srcPath, dstPath)
+		}
+		if filepath.IsRelativePath(srcPath) {
+			srcPath = filepath.Join(workdir, srcPath)
+		}
+		if filepath.IsRelativePath(dstPath) {
+			dstPath = filepath.Join(workdir, dstPath)
+		}
+	}
+	// Do the rename operation
+	if err := baseDir.Rename(srcPath, dstPath); err != nil {
+		return errors.Wrapf(err, "could not rename %s to %s", srcPath, dstPath)
+	}
+	return nil
+}
