@@ -52,13 +52,22 @@ func (p *processContext) WorkingDirectory() (string, error) {
 	return p.workdir.ReversePathLookup()
 }
 
-func (p *processContext) ChangeDirectory(dir string) error {
+// parsePath determines whether `path` is absolute or relative and, if it is absolute, returns
+// a new path that is relative to '/' and the directory.Directory for the filesystem root.
+// Otherwise, if `path` is relative, then parsePath returns the original path and the
+// directory.Directory for the current working directory.
+func (p *processContext) parsePath(path string) (string, directory.Directory) {
 	baseDir := p.workdir
-	if filepath.IsAbsolutePath(dir) {
+	if filepath.IsAbsolutePath(path) {
 		baseDir = p.fileSystem.RootDirectory()
-		dir = strings.TrimLeft(dir, filepath.PathSeparator)
+		path = strings.TrimLeft(path, filepath.PathSeparator)
 	}
-	newDir, lookupErr := baseDir.LookupSubdirectory(dir)
+	return path, baseDir
+}
+
+func (p *processContext) ChangeDirectory(path string) error {
+	path, baseDir := p.parsePath(path)
+	newDir, lookupErr := baseDir.LookupSubdirectory(path)
 	if lookupErr != nil {
 		return errors.Wrapf(lookupErr, "could not change directories")
 	}
@@ -66,77 +75,53 @@ func (p *processContext) ChangeDirectory(dir string) error {
 	return nil
 }
 
-func (p *processContext) MakeDirectory(dir string) error {
-	baseDir := p.workdir
-	if filepath.IsAbsolutePath(dir) {
-		baseDir = p.fileSystem.RootDirectory()
-		dir = strings.TrimLeft(dir, filepath.PathSeparator)
-	}
-	if _, err := baseDir.Mkdir(dir); err != nil {
-		return errors.Wrapf(err, "could not create directory '%s'", dir)
+func (p *processContext) MakeDirectory(path string) error {
+	path, baseDir := p.parsePath(path)
+	if _, err := baseDir.Mkdir(path); err != nil {
+		return errors.Wrapf(err, "could not create directory '%s'", path)
 	}
 	return nil
 }
 
-func (p *processContext) ListDirectory(dir string) ([]directory.DirectoryEntry, error) {
-	baseDir := p.workdir
-	if filepath.IsAbsolutePath(dir) {
-		baseDir = p.fileSystem.RootDirectory()
-		dir = strings.TrimLeft(dir, filepath.PathSeparator)
-	}
-	entries, err := baseDir.ReadDir(dir)
+func (p *processContext) ListDirectory(path string) ([]directory.DirectoryEntry, error) {
+	path, baseDir := p.parsePath(path)
+	entries, err := baseDir.ReadDir(path)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not list entries in directory '%s'", dir)
+		return nil, errors.Wrapf(err, "could not list entries in directory '%s'", path)
 	}
 	return entries, nil
 }
 
-func (p *processContext) RemoveDirectory(dir string) error {
-	baseDir := p.workdir
-	if filepath.IsAbsolutePath(dir) {
-		baseDir = p.fileSystem.RootDirectory()
-		dir = strings.TrimLeft(dir, filepath.PathSeparator)
-	}
-	if err := baseDir.Rmdir(dir); err != nil {
-		return errors.Wrapf(err, "could not remove directory '%s'", dir)
+func (p *processContext) RemoveDirectory(path string) error {
+	path, baseDir := p.parsePath(path)
+	if err := baseDir.Rmdir(path); err != nil {
+		return errors.Wrapf(err, "could not remove directory '%s'", path)
 	}
 	return nil
 }
 
-func (p *processContext) CreateFile(filePath string) (file.File, error) {
-	baseDir := p.workdir
-	if filepath.IsAbsolutePath(filePath) {
-		baseDir = p.fileSystem.RootDirectory()
-		filePath = strings.TrimLeft(filePath, filepath.PathSeparator)
-	}
-	f, err := baseDir.CreateFile(filePath)
+func (p *processContext) CreateFile(path string) (file.File, error) {
+	path, baseDir := p.parsePath(path)
+	f, err := baseDir.CreateFile(path)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not create file '%s'", filePath)
+		return nil, errors.Wrapf(err, "could not create file '%s'", path)
 	}
 	return f, nil
 }
 
-func (p *processContext) OpenFile(filePath string) (file.File, error) {
-	baseDir := p.workdir
-	if filepath.IsAbsolutePath(filePath) {
-		baseDir = p.fileSystem.RootDirectory()
-		filePath = strings.TrimLeft(filePath, filepath.PathSeparator)
-	}
-	f, err := baseDir.OpenFile(filePath)
+func (p *processContext) OpenFile(path string) (file.File, error) {
+	path, baseDir := p.parsePath(path)
+	f, err := baseDir.OpenFile(path)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not open file '%s'", filePath)
+		return nil, errors.Wrapf(err, "could not open file '%s'", path)
 	}
 	return f, nil
 }
 
-func (p *processContext) DeleteFile(filePath string) error {
-	baseDir := p.workdir
-	if filepath.IsAbsolutePath(filePath) {
-		baseDir = p.fileSystem.RootDirectory()
-		filePath = strings.TrimLeft(filePath, filepath.PathSeparator)
-	}
-	if err := baseDir.DeleteFile(filePath); err != nil {
-		return errors.Wrapf(err, "could not delete file '%s'", filePath)
+func (p *processContext) DeleteFile(path string) error {
+	path, baseDir := p.parsePath(path)
+	if err := baseDir.DeleteFile(path); err != nil {
+		return errors.Wrapf(err, "could not delete file '%s'", path)
 	}
 	return nil
 }
