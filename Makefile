@@ -13,7 +13,10 @@ build:
 	go build -o build/main main.go
 
 test:
-	go test -v ./...
+	go test -v -cover -coverprofile=coverprofile.out ./...
+
+showcoverage:
+	go tool cover -html=coverprofile.out
 
 # Lists all available targets within the Makefile, per https://stackoverflow.com/a/26339924
 .PHONY: list-targets
