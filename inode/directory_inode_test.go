@@ -7,7 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDirectoryInode_IsRootDirectory(t *testing.T) {
+func TestDirectoryInodeType(t *testing.T) {
+	i := inode.NewRootDirectoryInode()
+	assert.Equal(t, inode.InodeDirectory, i.InodeType())
+}
+
+func TestIsRootDirectory(t *testing.T) {
 	rootDirectoryInode := inode.NewRootDirectoryInode()
 	rootIsRoot := rootDirectoryInode.IsRootDirectoryInode()
 	assert.True(t, rootIsRoot, "the root directory's inode should be identified as a root directory inode")

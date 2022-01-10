@@ -1,5 +1,13 @@
 package inode
 
+import (
+	"fmt"
+	"io"
+	"math"
+
+	"github.com/manderson5192/memfs/utils"
+)
+
 type FileInode struct {
 	basicInode
 	data []byte
@@ -14,4 +22,88 @@ func NewFileInode() *FileInode {
 
 func (i *FileInode) InodeType() InodeType {
 	return InodeFile
+}
+
+// ReadAll returns a copy of all of the FileInode's data
+func (i *FileInode) ReadAll() []byte {
+	i.rwMutex.RLock()
+	defer i.rwMutex.RUnlock()
+	toReturn := make([]byte, len(i.data))
+	copy(toReturn, i.data)
+	return toReturn
+}
+
+// TruncateAndWriteAll replaces the FileInode's data with those of d
+func (i *FileInode) TruncateAndWriteAll(d []byte) error {
+	if d == nil {
+		return fmt.Errorf("buffer is nil")
+	}
+	i.rwMutex.Lock()
+	defer i.rwMutex.Unlock()
+	i.data = d
+	return nil
+}
+
+// ReadAt tries to copy len(p) bytes at offset off from the file into p.  If there are fewer than
+// len(p) bytes between the offset and the end of the file, then the error will be non-nil and
+// equal to io.EOF.
+func (i *FileInode) ReadAt(p []byte, off int64) (int, error) {
+	if p == nil {
+		return 0, fmt.Errorf("buffer is nil")
+	}
+	if off < 0 {
+		return 0, fmt.Errorf("negative offset")
+	}
+	// Edge case: since `off` is int64 and len(i.data) is `int`, we can only ever read from an offset
+	// as large as math.MaxInt
+	if off > int64(math.MaxInt) {
+		return 0, io.EOF
+	}
+	intOff := int(off)
+	i.rwMutex.RLock()
+	defer i.rwMutex.RUnlock()
+	bytesAfterOffset := utils.Max(len(i.data)-intOff, 0)
+	numBytesRequested := len(p)
+	numBytesToRead := utils.Min(bytesAfterOffset, numBytesRequested)
+	copy(p, i.data[intOff:intOff+numBytesToRead])
+	var err error = error(nil)
+	// If the number of bytes read is fewer than the number requested, then we read up to
+	if numBytesToRead < numBytesRequested {
+		err = io.EOF
+	}
+	return numBytesToRead, err
+}
+
+// WriteAt attempts copying len(p) bytes from p into the FileInode's data at offset off.  If off is
+// beyond the end of the file, then the file is extended with zero bytes up to the offset before
+// copying begins.  It returns the number of bytes that were copied, or 0 and an error.
+func (i *FileInode) WriteAt(p []byte, off int64) (n int, err error) {
+	if p == nil {
+		return 0, fmt.Errorf("buffer is nil")
+	}
+	if off < 0 {
+		return 0, fmt.Errorf("negative offset")
+	}
+	// Edge case: since `off` is int64 and len(i.data) is `int`, we can only ever write to an offset
+	// as large as math.MaxInt
+	if off+int64(len(p)) > int64(math.MaxInt) {
+		return 0, fmt.Errorf("cannot write beyond max file size")
+	}
+	// Edge case: the above check might pass if off is close to math.MaxInt64, so check for integer
+	// wraparound
+	if off+int64(len(p)) < 0 {
+		return 0, fmt.Errorf("cannot write beyond max file size")
+	}
+	intOff := int(off)
+	i.rwMutex.Lock()
+	defer i.rwMutex.Unlock()
+	// If intOff is beyond the end of the file, then we need to pad with zero bytes up to the offset
+	if intOff > len(i.data) {
+		i.data = append(i.data, make([]byte, intOff-len(i.data))...)
+	}
+	bytesBetweenOffsetAndEOF := utils.Max(len(i.data)-intOff, 0)
+	copy(i.data[intOff:intOff+bytesBetweenOffsetAndEOF], p[:bytesBetweenOffsetAndEOF])
+	i.data = append(i.data, p[bytesBetweenOffsetAndEOF:]...)
+
+	return len(p), nil
 }
