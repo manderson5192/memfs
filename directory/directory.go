@@ -1,6 +1,7 @@
 package directory
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -34,12 +35,25 @@ const (
 	FileType
 )
 
+func (t DirectoryEntryType) MarshalJSON() ([]byte, error) {
+	toReturn := "invalid"
+	switch t {
+	case DirectoryType:
+		toReturn = "directory"
+	case FileType:
+		toReturn = "file"
+	default:
+		toReturn = "invalid"
+	}
+	return json.Marshal(toReturn)
+}
+
 // DirectoryEntry represents a file or directory entry in a given directory
 type DirectoryEntry struct {
 	// Name is the entry's name
-	Name string
+	Name string `json:"name"`
 	// Type indicates whether the entry is a file or a directory
-	Type DirectoryEntryType
+	Type DirectoryEntryType `json:"type"`
 }
 
 type Directory interface {

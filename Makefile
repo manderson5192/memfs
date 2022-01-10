@@ -6,6 +6,9 @@ help:
 run:
 	go run main.go
 
+clean:
+	rm -rf build
+
 build:
 	go build -o build/main main.go
 
