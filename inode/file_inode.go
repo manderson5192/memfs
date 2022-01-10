@@ -24,6 +24,12 @@ func (i *FileInode) InodeType() InodeType {
 	return InodeFile
 }
 
+func (i *FileInode) Size() int {
+	i.rwMutex.RLock()
+	defer i.rwMutex.RUnlock()
+	return len(i.data)
+}
+
 // ReadAll returns a copy of all of the FileInode's data
 func (i *FileInode) ReadAll() []byte {
 	i.rwMutex.RLock()

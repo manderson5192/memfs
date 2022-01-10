@@ -232,7 +232,7 @@ func (i *DirectoryInode) delete() error {
 		return nil
 	}
 	// Check: is the directory empty?
-	for entry, _ := range i.contents {
+	for entry := range i.contents {
 		if entry == SelfDirectoryEntry || entry == ParentDirectoryEntry {
 			continue
 		}
