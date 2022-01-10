@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/manderson5192/memfs/path"
+	"github.com/manderson5192/memfs/filepath"
 	"github.com/manderson5192/memfs/utils"
 	"github.com/pkg/errors"
 )
@@ -93,8 +93,8 @@ func (i *DirectoryInode) IsRootDirectoryInode() bool {
 // already exists
 func (i *DirectoryInode) AddDirectory(name string) (*DirectoryInode, error) {
 	// Check that this directory entry doesn't contain the path separator
-	if strings.Contains(name, path.PathSeparator) {
-		return nil, fmt.Errorf("cannot add subdirectory inode for a name containing path separator %s: %s", path.PathSeparator, name)
+	if strings.Contains(name, filepath.PathSeparator) {
+		return nil, fmt.Errorf("cannot add subdirectory inode for a name containing path separator %s: %s", filepath.PathSeparator, name)
 	}
 	i.rwMutex.Lock()
 	defer i.rwMutex.Unlock()
@@ -115,8 +115,8 @@ func (i *DirectoryInode) AddDirectory(name string) (*DirectoryInode, error) {
 // with a name containing the path separator and it cannot create a file whose name is already taken
 func (i *DirectoryInode) AddFile(name string) (*FileInode, error) {
 	// Check that this directory entry doesn't contain the path separator
-	if strings.Contains(name, path.PathSeparator) {
-		return nil, fmt.Errorf("cannot add file inode for a name containing path separator %s: %s", path.PathSeparator, name)
+	if strings.Contains(name, filepath.PathSeparator) {
+		return nil, fmt.Errorf("cannot add file inode for a name containing path separator %s: %s", filepath.PathSeparator, name)
 	}
 	i.rwMutex.Lock()
 	defer i.rwMutex.Unlock()
@@ -136,8 +136,8 @@ func (i *DirectoryInode) AddFile(name string) (*FileInode, error) {
 // DirectoryInodeEntry obtains the Inode corresponding to the named entry, or an error
 func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, error) {
 	// Check that this directory entry doesn't contain the path separator
-	if strings.Contains(entry, path.PathSeparator) {
-		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, path.PathSeparator)
+	if strings.Contains(entry, filepath.PathSeparator) {
+		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, filepath.PathSeparator)
 	}
 	i.rwMutex.RLock()
 	defer i.rwMutex.RUnlock()
@@ -160,8 +160,8 @@ func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, err
 // FileInodeEntry obtains the Inode corresponding to the named entry, or an error
 func (i *DirectoryInode) FileInodeEntry(entry string) (*FileInode, error) {
 	// Check that this entry doesn't contain the path separator
-	if strings.Contains(entry, path.PathSeparator) {
-		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, path.PathSeparator)
+	if strings.Contains(entry, filepath.PathSeparator) {
+		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, filepath.PathSeparator)
 	}
 	i.rwMutex.RLock()
 	defer i.rwMutex.RUnlock()
@@ -202,15 +202,15 @@ func (i *DirectoryInode) InodeEntries() []InodeEntry {
 // separator character.  If the specified subdirectory can't be found, or if any named directory
 // entry along its path is not a directory (e.g. if it is a file), then it will return an error
 func (i *DirectoryInode) LookupSubdirectory(subdirectory string) (*DirectoryInode, error) {
-	if !path.IsRelativePath(subdirectory) {
+	if !filepath.IsRelativePath(subdirectory) {
 		return nil, fmt.Errorf("'%s' is not a relative path", subdirectory)
 	}
 	currentDirInode := i
 	currentSubdirectory := subdirectory
 	for len(currentSubdirectory) > 0 {
 		// Parse a directory entry from the beginning of currentSubdirectory
-		currentSubdirectory = strings.TrimLeft(currentSubdirectory, path.PathSeparator)
-		entryName, remainder, _ := utils.Cut(currentSubdirectory, path.PathSeparator)
+		currentSubdirectory = strings.TrimLeft(currentSubdirectory, filepath.PathSeparator)
+		entryName, remainder, _ := utils.Cut(currentSubdirectory, filepath.PathSeparator)
 		// Get the directory inode for this entry
 		dirInode, getEntryErr := currentDirInode.DirectoryInodeEntry(entryName)
 		if getEntryErr != nil {

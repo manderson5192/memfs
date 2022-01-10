@@ -5,8 +5,8 @@ import (
 
 	"github.com/manderson5192/memfs/directory"
 	"github.com/manderson5192/memfs/file"
+	"github.com/manderson5192/memfs/filepath"
 	"github.com/manderson5192/memfs/filesys"
-	"github.com/manderson5192/memfs/path"
 	"github.com/pkg/errors"
 )
 
@@ -54,9 +54,9 @@ func (p *processContext) WorkingDirectory() (string, error) {
 
 func (p *processContext) ChangeDirectory(dir string) error {
 	baseDir := p.workdir
-	if path.IsAbsolutePath(dir) {
+	if filepath.IsAbsolutePath(dir) {
 		baseDir = p.fileSystem.RootDirectory()
-		dir = strings.TrimLeft(dir, path.PathSeparator)
+		dir = strings.TrimLeft(dir, filepath.PathSeparator)
 	}
 	newDir, lookupErr := baseDir.LookupSubdirectory(dir)
 	if lookupErr != nil {
@@ -68,9 +68,9 @@ func (p *processContext) ChangeDirectory(dir string) error {
 
 func (p *processContext) MakeDirectory(dir string) error {
 	baseDir := p.workdir
-	if path.IsAbsolutePath(dir) {
+	if filepath.IsAbsolutePath(dir) {
 		baseDir = p.fileSystem.RootDirectory()
-		dir = strings.TrimLeft(dir, path.PathSeparator)
+		dir = strings.TrimLeft(dir, filepath.PathSeparator)
 	}
 	if _, err := baseDir.Mkdir(dir); err != nil {
 		return errors.Wrapf(err, "could not create directory '%s'", dir)
@@ -80,9 +80,9 @@ func (p *processContext) MakeDirectory(dir string) error {
 
 func (p *processContext) ListDirectory(dir string) ([]directory.DirectoryEntry, error) {
 	baseDir := p.workdir
-	if path.IsAbsolutePath(dir) {
+	if filepath.IsAbsolutePath(dir) {
 		baseDir = p.fileSystem.RootDirectory()
-		dir = strings.TrimLeft(dir, path.PathSeparator)
+		dir = strings.TrimLeft(dir, filepath.PathSeparator)
 	}
 	entries, err := baseDir.ReadDir(dir)
 	if err != nil {
@@ -93,9 +93,9 @@ func (p *processContext) ListDirectory(dir string) ([]directory.DirectoryEntry, 
 
 func (p *processContext) RemoveDirectory(dir string) error {
 	baseDir := p.workdir
-	if path.IsAbsolutePath(dir) {
+	if filepath.IsAbsolutePath(dir) {
 		baseDir = p.fileSystem.RootDirectory()
-		dir = strings.TrimLeft(dir, path.PathSeparator)
+		dir = strings.TrimLeft(dir, filepath.PathSeparator)
 	}
 	if err := baseDir.Rmdir(dir); err != nil {
 		return errors.Wrapf(err, "could not remove directory '%s'", dir)
@@ -105,9 +105,9 @@ func (p *processContext) RemoveDirectory(dir string) error {
 
 func (p *processContext) CreateFile(filePath string) (file.File, error) {
 	baseDir := p.workdir
-	if path.IsAbsolutePath(filePath) {
+	if filepath.IsAbsolutePath(filePath) {
 		baseDir = p.fileSystem.RootDirectory()
-		filePath = strings.TrimLeft(filePath, path.PathSeparator)
+		filePath = strings.TrimLeft(filePath, filepath.PathSeparator)
 	}
 	f, err := baseDir.CreateFile(filePath)
 	if err != nil {
@@ -118,9 +118,9 @@ func (p *processContext) CreateFile(filePath string) (file.File, error) {
 
 func (p *processContext) OpenFile(filePath string) (file.File, error) {
 	baseDir := p.workdir
-	if path.IsAbsolutePath(filePath) {
+	if filepath.IsAbsolutePath(filePath) {
 		baseDir = p.fileSystem.RootDirectory()
-		filePath = strings.TrimLeft(filePath, path.PathSeparator)
+		filePath = strings.TrimLeft(filePath, filepath.PathSeparator)
 	}
 	f, err := baseDir.OpenFile(filePath)
 	if err != nil {
@@ -131,9 +131,9 @@ func (p *processContext) OpenFile(filePath string) (file.File, error) {
 
 func (p *processContext) DeleteFile(filePath string) error {
 	baseDir := p.workdir
-	if path.IsAbsolutePath(filePath) {
+	if filepath.IsAbsolutePath(filePath) {
 		baseDir = p.fileSystem.RootDirectory()
-		filePath = strings.TrimLeft(filePath, path.PathSeparator)
+		filePath = strings.TrimLeft(filePath, filepath.PathSeparator)
 	}
 	if err := baseDir.DeleteFile(filePath); err != nil {
 		return errors.Wrapf(err, "could not delete file '%s'", filePath)

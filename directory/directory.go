@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/manderson5192/memfs/file"
+	"github.com/manderson5192/memfs/filepath"
 	"github.com/manderson5192/memfs/inode"
-	"github.com/manderson5192/memfs/path"
 	"github.com/manderson5192/memfs/utils"
 	"github.com/pkg/errors"
 )
@@ -102,7 +102,7 @@ func (d *directory) ReversePathLookup() (string, error) {
 		pathParts = append([]string{pathPart}, pathParts...)
 		currentDirInode = parentDirInode
 	}
-	path := strings.Join(pathParts, path.PathSeparator)
+	path := strings.Join(pathParts, filepath.PathSeparator)
 	return "/" + path, nil
 }
 
@@ -123,11 +123,11 @@ func (d *directory) Mkdir(subdirectory string) (Directory, error) {
 	if subdirectory == "" {
 		return nil, fmt.Errorf("no subdirectory provided")
 	}
-	if !path.IsRelativePath(subdirectory) {
+	if !filepath.IsRelativePath(subdirectory) {
 		return nil, fmt.Errorf("'%s' is not a relative path", subdirectory)
 	}
 	// Lookup the directory that will be parent to the subdirectory
-	subdirNameToLookup, dirNameToCreate, found := utils.RightCut(subdirectory, path.PathSeparator)
+	subdirNameToLookup, dirNameToCreate, found := utils.RightCut(subdirectory, filepath.PathSeparator)
 	subdirInode := d.DirectoryInode
 	if found {
 		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
@@ -146,7 +146,7 @@ func (d *directory) Mkdir(subdirectory string) (Directory, error) {
 
 func (d *directory) ReadDir(subdirectory string) ([]DirectoryEntry, error) {
 	// Validate that the path is relative
-	if !path.IsRelativePath(subdirectory) {
+	if !filepath.IsRelativePath(subdirectory) {
 		return nil, fmt.Errorf("'%s' is not a relative path", subdirectory)
 	}
 	// Lookup the DirectoryInode for the subdirectory
@@ -171,11 +171,11 @@ func (d *directory) Rmdir(subdirectory string) error {
 	if subdirectory == "" {
 		return fmt.Errorf("no subdirectory provided")
 	}
-	if !path.IsRelativePath(subdirectory) {
+	if !filepath.IsRelativePath(subdirectory) {
 		return fmt.Errorf("'%s' is not a relative path", subdirectory)
 	}
 	// Lookup the directory from which the named subdirectory will be removed
-	subdirNameToLookup, dirNameToDelete, found := utils.RightCut(subdirectory, path.PathSeparator)
+	subdirNameToLookup, dirNameToDelete, found := utils.RightCut(subdirectory, filepath.PathSeparator)
 	subdirInode := d.DirectoryInode
 	if found {
 		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
@@ -196,11 +196,11 @@ func (d *directory) CreateFile(relativePath string) (file.File, error) {
 	if relativePath == "" {
 		return nil, fmt.Errorf("no path provided")
 	}
-	if !path.IsRelativePath(relativePath) {
+	if !filepath.IsRelativePath(relativePath) {
 		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
 	}
 	// Lookup the directory that will be parent to the file
-	subdirNameToLookup, fileToCreate, found := utils.RightCut(relativePath, path.PathSeparator)
+	subdirNameToLookup, fileToCreate, found := utils.RightCut(relativePath, filepath.PathSeparator)
 	subdirInode := d.DirectoryInode
 	if found {
 		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
@@ -222,11 +222,11 @@ func (d *directory) OpenFile(relativePath string) (file.File, error) {
 	if relativePath == "" {
 		return nil, fmt.Errorf("no path provided")
 	}
-	if !path.IsRelativePath(relativePath) {
+	if !filepath.IsRelativePath(relativePath) {
 		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
 	}
 	// Lookup the directory that is parent to the file
-	subdirNameToLookup, filename, found := utils.RightCut(relativePath, path.PathSeparator)
+	subdirNameToLookup, filename, found := utils.RightCut(relativePath, filepath.PathSeparator)
 	subdirInode := d.DirectoryInode
 	if found {
 		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
@@ -248,11 +248,11 @@ func (d *directory) DeleteFile(relativePath string) error {
 	if relativePath == "" {
 		return fmt.Errorf("no path provided")
 	}
-	if !path.IsRelativePath(relativePath) {
+	if !filepath.IsRelativePath(relativePath) {
 		return fmt.Errorf("'%s' is not a relative path", relativePath)
 	}
 	// Lookup the directory from which the named subdirectory will be removed
-	subdirNameToLookup, fileToDelete, found := utils.RightCut(relativePath, path.PathSeparator)
+	subdirNameToLookup, fileToDelete, found := utils.RightCut(relativePath, filepath.PathSeparator)
 	subdirInode := d.DirectoryInode
 	if found {
 		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
