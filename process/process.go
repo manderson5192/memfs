@@ -34,6 +34,11 @@ type ProcessFilesystemContext interface {
 	// DeleteFile deletes the specified file.  Accepts absolute or relative paths.  Returns an error
 	// if unsuccessful
 	DeleteFile(path string) error
+	// Rename moves the file or directory at srcPath to dstPath.  If dstPath already exists, then
+	// it will attempt to remove that file or directory.  Returns an error if unsuccessful.
+	Rename(srcPath, dstPath string) error
+	// Stat returns a file.FileInfo for the specified file or directory, or an error.
+	Stat(path string) (*directory.FileInfo, error)
 }
 
 type processContext struct {
@@ -154,3 +159,13 @@ func (p *processContext) Rename(srcPath, dstPath string) error {
 	}
 	return nil
 }
+
+func (p *processContext) Stat(path string) (*directory.FileInfo, error) {
+	path, baseDir := p.parsePath(path)
+	fileInfo, err := baseDir.Stat(path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not stat %s", path)
+	}
+	return fileInfo, nil
+}
+
