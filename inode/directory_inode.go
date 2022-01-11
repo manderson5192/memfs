@@ -42,6 +42,19 @@ func (i *DirectoryInode) InodeType() InodeType {
 	return InodeDirectory
 }
 
+func (i *DirectoryInode) Size() int {
+	i.rwMutex.RLock()
+	defer i.rwMutex.RUnlock()
+	numEntries := 0
+	for name := range i.contents {
+		if name == SelfDirectoryEntry || name == ParentDirectoryEntry {
+			continue
+		}
+		numEntries++
+	}
+	return numEntries
+}
+
 // Parent obtains the DirectoryInode that is parent to this DirectoryInode
 func (i *DirectoryInode) Parent() *DirectoryInode {
 	i.rwMutex.RLock()
@@ -133,17 +146,33 @@ func (i *DirectoryInode) AddFile(name string) (*FileInode, error) {
 	return fileInode, nil
 }
 
-// DirectoryInodeEntry obtains the Inode corresponding to the named entry, or an error
-func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, error) {
+// this function is **not thread safe**.  It should only be invoked when a Read-level lock is held
+// on the DirectoryInode
+func (i *DirectoryInode) doInodeEntry(entry string) (Inode, error) {
 	// Check that this directory entry doesn't contain the path separator
 	if strings.Contains(entry, filepath.PathSeparator) {
 		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, filepath.PathSeparator)
 	}
-	i.rwMutex.RLock()
-	defer i.rwMutex.RUnlock()
 	inode, exists := i.contents[entry]
 	if !exists {
 		return nil, fmt.Errorf("entry '%s' does not exist", entry)
+	}
+	return inode, nil
+}
+
+func (i *DirectoryInode) InodeEntry(entry string) (Inode, error) {
+	i.rwMutex.RLock()
+	defer i.rwMutex.RUnlock()
+	return i.doInodeEntry(entry)
+}
+
+// DirectoryInodeEntry obtains the Inode corresponding to the named entry, or an error
+func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, error) {
+	i.rwMutex.RLock()
+	defer i.rwMutex.RUnlock()
+	inode, err := i.doInodeEntry(entry)
+	if err != nil {
+		return nil, err
 	}
 	dirInode, ok := inode.(*DirectoryInode)
 	if !ok {
@@ -159,15 +188,11 @@ func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, err
 
 // FileInodeEntry obtains the Inode corresponding to the named entry, or an error
 func (i *DirectoryInode) FileInodeEntry(entry string) (*FileInode, error) {
-	// Check that this entry doesn't contain the path separator
-	if strings.Contains(entry, filepath.PathSeparator) {
-		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, filepath.PathSeparator)
-	}
 	i.rwMutex.RLock()
 	defer i.rwMutex.RUnlock()
-	inode, exists := i.contents[entry]
-	if !exists {
-		return nil, fmt.Errorf("entry '%s' does not exist", entry)
+	inode, err := i.doInodeEntry(entry)
+	if err != nil {
+		return nil, err
 	}
 	fileInode, ok := inode.(*FileInode)
 	if !ok {
@@ -200,8 +225,12 @@ func (i *DirectoryInode) InodeEntries() []InodeEntry {
 // Lookup will return a DirectoryInode for the specified subdirectory relative to this
 // DirectoryInode.  It assumes that subdirectory is a relative path, even if it begins with a path
 // separator character.  If the specified subdirectory can't be found, or if any named directory
-// entry along its path is not a directory (e.g. if it is a file), then it will return an error
+// entry along its path is not a directory (e.g. if it is a file), then it will return an error.  If
+// subdirectory is the empty string, then the receiver DirectoryInode will be returned.
 func (i *DirectoryInode) LookupSubdirectory(subdirectory string) (*DirectoryInode, error) {
+	if subdirectory == "" {
+		return i, nil
+	}
 	if !filepath.IsRelativePath(subdirectory) {
 		return nil, fmt.Errorf("'%s' is not a relative path", subdirectory)
 	}

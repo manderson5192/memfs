@@ -12,6 +12,7 @@ const (
 
 type Inode interface {
 	InodeType() InodeType
+	Size() int
 }
 
 type basicInode struct {

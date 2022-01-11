@@ -56,12 +56,21 @@ type DirectoryEntry struct {
 	Type DirectoryEntryType `json:"type"`
 }
 
+// FileInfo represents information about a single file or directory.  If Type indicates a directory,
+// then Size will be the number of directory entries.  If Type indicates a file, then Size will be
+// the file's size in bytes
+type FileInfo struct {
+	Size int
+	Type DirectoryEntryType
+}
+
 type Directory interface {
 	// Equals returns true if the other Directory references the same inode, false otherwise
 	Equals(other Directory) bool
 	// ReversePathLookup returns a valid absolute path for the directory or an error
 	ReversePathLookup() (string, error)
-	// LookupSubdirectory returns the Directory for the subdirectory of the current directory or an error
+	// LookupSubdirectory returns the Directory for the subdirectory of the current directory, or an
+	// error.  If subdirectory is empty, then this Directory itself will be returned.
 	LookupSubdirectory(subdirectory string) (Directory, error)
 	// Mkdir creates and returns a Directory for the specified subdirectory of the current
 	// directory, or returns an error.  It will return an error if a path component does not exist
@@ -84,6 +93,9 @@ type Directory interface {
 	// relative dst path.  If an entry already exists at the dst path, then this operation will
 	// attempt to atomically replace it.  Returns an error if unsuccessful
 	Rename(srcPath, dstPath string) error
+	// Stat returns a FileInfo for the file or directory at the indicated path.  If relativePath is
+	// empty, then the indicated path will for the receiver Directory object
+	Stat(relativePath string) (*FileInfo, error)
 }
 
 type directory struct {
@@ -258,6 +270,45 @@ func (d *directory) OpenFile(relativePath string) (file.File, error) {
 		return nil, errors.Wrapf(err, "could not open %s", relativePath)
 	}
 	return file.NewFile(fileInode), nil
+}
+
+func (d *directory) Stat(relativePath string) (*FileInfo, error) {
+	genericInode := inode.Inode(d.DirectoryInode)
+	if relativePath != "" {
+		// Validate that the path is relative
+		if !filepath.IsRelativePath(relativePath) {
+			return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
+		}
+		// Lookup the directory that is parent to the file
+		subdirNameToLookup, filename, found := utils.RightCut(relativePath, filepath.PathSeparator)
+		subdirInode := d.DirectoryInode
+		if found {
+			dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
+			if err != nil {
+				return nil, errors.Wrapf(err, "could not stat %s", relativePath)
+			}
+			subdirInode = dirInode
+		}
+		var err error
+		genericInode, err = subdirInode.InodeEntry(filename)
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not stat %s", relativePath)
+		}
+	}
+	switch inodeTyped := genericInode.(type) {
+	case *inode.FileInode:
+		return &FileInfo{
+			Type: FileType,
+			Size: inodeTyped.Size(),
+		}, nil
+	case *inode.DirectoryInode:
+		return &FileInfo{
+			Type: DirectoryType,
+			Size: inodeTyped.Size(),
+		}, nil
+	default:
+		return nil, fmt.Errorf("malformed inoded of type '%s' on path '%s'", genericInode.InodeType().String(), relativePath)
+	}
 }
 
 func (d *directory) DeleteFile(relativePath string) error {
