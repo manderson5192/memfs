@@ -3,7 +3,6 @@ package process
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/manderson5192/memfs/directory"
 	"github.com/manderson5192/memfs/file"
@@ -69,22 +68,24 @@ func (p *processContext) WorkingDirectory() (string, error) {
 	return p.workdir.ReversePathLookup()
 }
 
-// parsePath determines whether `path` is absolute or relative and, if it is absolute, returns
-// a new path that is relative to '/' and the directory.Directory for the filesystem root.
-// Otherwise, if `path` is relative, then parsePath returns the original path and the
-// directory.Directory for the current working directory.
-func (p *processContext) parsePath(path string) (string, directory.Directory) {
+// toCleanRelativePathAndBaseDir examines whether path is absolute or relative and, based on that
+// insight, returns a base directory (either the root directory or the working directory) and a
+// relative (to the base directory) path that is equivalent to path.  It also uses filepath.Path()
+// to cleanup path before examination.
+func (p *processContext) toCleanRelativePathAndBaseDir(path string) (string, directory.Directory) {
 	baseDir := p.workdir
+	path = filepath.Clean(path)
 	if filepath.IsAbsolutePath(path) {
 		baseDir = p.fileSystem.RootDirectory()
-		path = strings.TrimLeft(path, filepath.PathSeparator)
+		// Trim the leading file separator
+		path = path[1:]
 	}
 	return path, baseDir
 }
 
 func (p *processContext) ChangeDirectory(path string) error {
-	path, baseDir := p.parsePath(path)
-	newDir, lookupErr := baseDir.LookupSubdirectory(path)
+	relativePath, baseDir := p.toCleanRelativePathAndBaseDir(path)
+	newDir, lookupErr := baseDir.LookupSubdirectory(relativePath)
 	if lookupErr != nil {
 		return errors.Wrapf(lookupErr, "could not change directories")
 	}
@@ -93,16 +94,16 @@ func (p *processContext) ChangeDirectory(path string) error {
 }
 
 func (p *processContext) MakeDirectory(path string) error {
-	path, baseDir := p.parsePath(path)
-	if _, err := baseDir.Mkdir(path); err != nil {
+	relativePath, baseDir := p.toCleanRelativePathAndBaseDir(path)
+	if _, err := baseDir.Mkdir(relativePath); err != nil {
 		return errors.Wrapf(err, "could not create directory '%s'", path)
 	}
 	return nil
 }
 
 func (p *processContext) ListDirectory(path string) ([]directory.DirectoryEntry, error) {
-	path, baseDir := p.parsePath(path)
-	entries, err := baseDir.ReadDir(path)
+	relativePath, baseDir := p.toCleanRelativePathAndBaseDir(path)
+	entries, err := baseDir.ReadDir(relativePath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not list entries in directory '%s'", path)
 	}
@@ -110,16 +111,16 @@ func (p *processContext) ListDirectory(path string) ([]directory.DirectoryEntry,
 }
 
 func (p *processContext) RemoveDirectory(path string) error {
-	path, baseDir := p.parsePath(path)
-	if err := baseDir.Rmdir(path); err != nil {
+	relativePath, baseDir := p.toCleanRelativePathAndBaseDir(path)
+	if err := baseDir.Rmdir(relativePath); err != nil {
 		return errors.Wrapf(err, "could not remove directory '%s'", path)
 	}
 	return nil
 }
 
 func (p *processContext) CreateFile(path string) (file.File, error) {
-	path, baseDir := p.parsePath(path)
-	f, err := baseDir.CreateFile(path)
+	relativePath, baseDir := p.toCleanRelativePathAndBaseDir(path)
+	f, err := baseDir.CreateFile(relativePath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not create file '%s'", path)
 	}
@@ -127,8 +128,8 @@ func (p *processContext) CreateFile(path string) (file.File, error) {
 }
 
 func (p *processContext) OpenFile(path string) (file.File, error) {
-	path, baseDir := p.parsePath(path)
-	f, err := baseDir.OpenFile(path)
+	relativePath, baseDir := p.toCleanRelativePathAndBaseDir(path)
+	f, err := baseDir.OpenFile(relativePath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not open file '%s'", path)
 	}
@@ -136,8 +137,8 @@ func (p *processContext) OpenFile(path string) (file.File, error) {
 }
 
 func (p *processContext) DeleteFile(path string) error {
-	path, baseDir := p.parsePath(path)
-	if err := baseDir.DeleteFile(path); err != nil {
+	relativePath, baseDir := p.toCleanRelativePathAndBaseDir(path)
+	if err := baseDir.DeleteFile(relativePath); err != nil {
 		return errors.Wrapf(err, "could not delete file '%s'", path)
 	}
 	return nil
@@ -147,10 +148,13 @@ func (p *processContext) Rename(srcPath, dstPath string) error {
 	// If one path is relative but the other is absolute, then use the working directory to make
 	// the relative path into an absolute one.
 	baseDir := p.workdir
+	srcPathRelative := filepath.Clean(srcPath)
+	dstPathRelative := filepath.Clean(dstPath)
 	if filepath.IsAbsolutePath(srcPath) && filepath.IsAbsolutePath(dstPath) {
 		baseDir = p.fileSystem.RootDirectory()
-		srcPath = strings.TrimLeft(srcPath, filepath.PathSeparator)
-		dstPath = strings.TrimLeft(dstPath, filepath.PathSeparator)
+		// Trim the leading file separators
+		srcPathRelative = srcPathRelative[1:]
+		dstPathRelative = dstPathRelative[1:]
 	} else if filepath.IsAbsolutePath(srcPath) != filepath.IsAbsolutePath(dstPath) {
 		// Convert both paths to be absolute
 		baseDir = p.fileSystem.RootDirectory()
@@ -159,22 +163,25 @@ func (p *processContext) Rename(srcPath, dstPath string) error {
 			return errors.Wrapf(err, "unable to rename %s to %s", srcPath, dstPath)
 		}
 		if filepath.IsRelativePath(srcPath) {
-			srcPath = filepath.Join(workdir, srcPath)
+			srcPathRelative = filepath.Join(workdir, srcPathRelative)
 		}
 		if filepath.IsRelativePath(dstPath) {
-			dstPath = filepath.Join(workdir, dstPath)
+			dstPathRelative = filepath.Join(workdir, dstPathRelative)
 		}
+		// Trim the leading file separators
+		srcPathRelative = srcPathRelative[1:]
+		dstPathRelative = dstPathRelative[1:]
 	}
 	// Do the rename operation
-	if err := baseDir.Rename(srcPath, dstPath); err != nil {
+	if err := baseDir.Rename(srcPathRelative, dstPathRelative); err != nil {
 		return errors.Wrapf(err, "could not rename %s to %s", srcPath, dstPath)
 	}
 	return nil
 }
 
 func (p *processContext) Stat(path string) (*directory.FileInfo, error) {
-	path, baseDir := p.parsePath(path)
-	fileInfo, err := baseDir.Stat(path)
+	relativePath, baseDir := p.toCleanRelativePathAndBaseDir(path)
+	fileInfo, err := baseDir.Stat(relativePath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not stat %s", path)
 	}

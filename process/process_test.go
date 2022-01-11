@@ -31,6 +31,70 @@ func (s *ProcessTestSuite) SetupTest() {
 	assert.Nil(s.T(), foobarFile.TruncateAndWriteAll([]byte("hello!")))
 }
 
+func (s *ProcessTestSuite) TestWorkingDirectory() {
+	workdir, err := s.p.WorkingDirectory()
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), "/", workdir)
+
+	err = s.p.ChangeDirectory("/.////../../a/b/../b/a/")
+	assert.Nil(s.T(), err)
+
+	workdir, err = s.p.WorkingDirectory()
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), "/a/b/a", workdir)
+}
+
+func (s *ProcessTestSuite) TestMakeDirectoryWithTrailingSlash() {
+	err := s.p.MakeDirectory("/a/b/d/")
+	assert.Nil(s.T(), err)
+
+	entries, err := s.p.ListDirectory("/a/b")
+	assert.Nil(s.T(), err)
+	assert.ElementsMatch(s.T(), []directory.DirectoryEntry{
+		{
+			Name: "a",
+			Type: directory.DirectoryType,
+		},
+		{
+			Name: "c",
+			Type: directory.DirectoryType,
+		},
+		{
+			Name: "d",
+			Type: directory.DirectoryType,
+		},
+	}, entries)
+}
+
+func (s *ProcessTestSuite) TestListDirectoryWithTrailingSlash() {
+	entries, err := s.p.ListDirectory("/a/b/")
+	assert.Nil(s.T(), err)
+	assert.ElementsMatch(s.T(), []directory.DirectoryEntry{
+		{
+			Name: "a",
+			Type: directory.DirectoryType,
+		},
+		{
+			Name: "c",
+			Type: directory.DirectoryType,
+		},
+	}, entries)
+}
+
+func (s *ProcessTestSuite) TestRemoveDirectoryWithTrailingSlash() {
+	err := s.p.RemoveDirectory("/a/b/c/")
+	assert.Nil(s.T(), err)
+
+	entries, err := s.p.ListDirectory("/a/b/")
+	assert.Nil(s.T(), err)
+	assert.ElementsMatch(s.T(), []directory.DirectoryEntry{
+		{
+			Name: "a",
+			Type: directory.DirectoryType,
+		},
+	}, entries)
+}
+
 func (s *ProcessTestSuite) TestStatRootDir() {
 	info, err := s.p.Stat("/")
 	assert.Nil(s.T(), err)
@@ -49,6 +113,15 @@ func (s *ProcessTestSuite) TestStatOnDir() {
 	}, *info)
 }
 
+func (s *ProcessTestSuite) TestStatOnDirTrailingSlash() {
+	info, err := s.p.Stat("/a/")
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), directory.FileInfo{
+		Size: 3,
+		Type: directory.DirectoryType,
+	}, *info)
+}
+
 func (s *ProcessTestSuite) TestStatOnFile() {
 	info, err := s.p.Stat("/a/foobar_file")
 	assert.Nil(s.T(), err)
@@ -56,6 +129,11 @@ func (s *ProcessTestSuite) TestStatOnFile() {
 		Size: 6,
 		Type: directory.FileType,
 	}, *info)
+}
+
+func (s *ProcessTestSuite) TestStatOnFileTrailingSlash() {
+	_, err := s.p.Stat("/a/foobar_file/")
+	assert.NotNil(s.T(), err)
 }
 
 func (s *ProcessTestSuite) TestStatNoExist() {
