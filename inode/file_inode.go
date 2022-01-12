@@ -103,13 +103,16 @@ func (i *FileInode) WriteAt(p []byte, off int64) (n int, err error) {
 	intOff := int(off)
 	i.rwMutex.Lock()
 	defer i.rwMutex.Unlock()
-	// If intOff is beyond the end of the file, then we need to pad with zero bytes up to the offset
-	if intOff > len(i.data) {
-		i.data = append(i.data, make([]byte, intOff-len(i.data))...)
+
+	// If (intOff + len(p)) is beyond the end of the file, then we need to pad with zero bytes up to
+	// that length
+	zeroesToAppend := 0
+	if (intOff + len(p)) > len(i.data) {
+		zeroesToAppend = intOff + len(p) - len(i.data)
 	}
-	bytesBetweenOffsetAndEOF := utils.Max(len(i.data)-intOff, 0)
-	copy(i.data[intOff:intOff+bytesBetweenOffsetAndEOF], p[:bytesBetweenOffsetAndEOF])
-	i.data = append(i.data, p[bytesBetweenOffsetAndEOF:]...)
+	i.data = append(i.data, make([]byte, zeroesToAppend)...)
+	// Do the data copy
+	copy(i.data[intOff:intOff+len(p)], p)
 
 	return len(p), nil
 }
