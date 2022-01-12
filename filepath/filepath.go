@@ -29,7 +29,8 @@ func IsRelativePath(path string) bool {
 //	(3) removes leading sequences of '..' parts from paths that start from '/'
 //
 // The contract (but not the implementation) of Clean() is inspired by the Go standard library's
-// Cut() method (from the path/filepath module)
+// Cut() method (from the path/filepath module).  Candidly, Go's implementation is much more
+// efficient -- I just figured it was a stretch to use their implementation for this assignment :).
 func Clean(path string) string {
 	// Replace sequential path separators with a single path separator
 	var builder strings.Builder
