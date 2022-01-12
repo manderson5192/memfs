@@ -384,23 +384,23 @@ func (i *DirectoryInode) SetParent(parent *DirectoryInode) {
 	i.contents[filepath.ParentDirectoryEntry] = parent
 }
 
-func MoveEntry(srcParentInode, dstParentInode *DirectoryInode, srcEntry, dstEntry string) error {
+func MoveEntry(srcParentInode, dstParentInode *DirectoryInode, src, dst *filepath.PathInfo) error {
 	// Check that srcEntry is not the special self or parent directory entries
-	if srcEntry == filepath.SelfDirectoryEntry || srcEntry == filepath.ParentDirectoryEntry {
+	if src.Entry == filepath.SelfDirectoryEntry || src.Entry == filepath.ParentDirectoryEntry {
 		return fmt.Errorf("cannot move '.' or '..' entries")
 	}
 	// Check the same for dstEntry
-	if dstEntry == filepath.SelfDirectoryEntry || dstEntry == filepath.ParentDirectoryEntry {
+	if dst.Entry == filepath.SelfDirectoryEntry || dst.Entry == filepath.ParentDirectoryEntry {
 		return fmt.Errorf("cannot overwrite '.' or '..' entries")
 	}
 	// Check that the dst entry name doesn't contain the path separator
-	if strings.Contains(dstEntry, filepath.PathSeparator) {
-		return fmt.Errorf("entry name '%s' contains the path separator", dstEntry)
+	if strings.Contains(dst.Entry, filepath.PathSeparator) {
+		return fmt.Errorf("entry name '%s' contains the path separator", dst.Entry)
 	}
 	// Edge case: srcParentInode and dstParentInode are the same.  That requires a different locking
 	// discipline, so we special-case it
 	if srcParentInode == dstParentInode {
-		return srcParentInode.renameEntry(srcEntry, dstEntry)
+		return srcParentInode.renameEntry(src, dst)
 	}
 	srcParentInode.rwMutex.Lock()
 	defer srcParentInode.rwMutex.Unlock()
@@ -411,31 +411,39 @@ func MoveEntry(srcParentInode, dstParentInode *DirectoryInode, srcEntry, dstEntr
 		return fmt.Errorf("cannot add entries to a directory marked for deletion")
 	}
 	// Get the inode for the srcEntry
-	srcInode, exists := srcParentInode.contents[srcEntry]
+	srcInode, exists := srcParentInode.contents[src.Entry]
 	if !exists {
-		return fmt.Errorf("source entry '%s' does not exist", srcEntry)
+		return fmt.Errorf("source entry '%s' does not exist", src.Entry)
+	}
+	if srcInode.InodeType() == InodeFile && src.MustBeDir {
+		// src ended with a separator, so it ought to be a directory, but we found a file.
+		return fmt.Errorf("src entry is a file but name references a directory")
+	}
+	if srcInode.InodeType() == InodeFile && dst.MustBeDir {
+		// dst ended with a separator, so it ought to be a directory, but src is a file
+		return fmt.Errorf("dst's name references a directory but src is a file")
 	}
 	// Insert the inode into its new location
 	switch srcInodeTyped := srcInode.(type) {
 	case *FileInode:
-		if err := dstParentInode.doInsertFileInode(dstEntry, srcInodeTyped); err != nil {
+		if err := dstParentInode.doInsertFileInode(dst.Entry, srcInodeTyped); err != nil {
 			return err
 		}
 	case *DirectoryInode:
-		if err := dstParentInode.doInsertDirectoryInode(dstEntry, srcInodeTyped); err != nil {
+		if err := dstParentInode.doInsertDirectoryInode(dst.Entry, srcInodeTyped); err != nil {
 			return err
 		}
 	default:
-		return fmt.Errorf("source entry '%s' has malformed inode of type '%s'", srcEntry, srcInode.InodeType().String())
+		return fmt.Errorf("source entry '%s' has malformed inode of type '%s'", src.Entry, srcInode.InodeType().String())
 	}
 	// Remove the inode from its old location
-	delete(srcParentInode.contents, srcEntry)
+	delete(srcParentInode.contents, src.Entry)
 	return nil
 }
 
-func (i *DirectoryInode) renameEntry(srcEntry, dstEntry string) error {
+func (i *DirectoryInode) renameEntry(src, dst *filepath.PathInfo) error {
 	// Special case: do nothing
-	if srcEntry == dstEntry {
+	if src.Entry == dst.Entry {
 		return nil
 	}
 	i.rwMutex.Lock()
@@ -445,22 +453,30 @@ func (i *DirectoryInode) renameEntry(srcEntry, dstEntry string) error {
 		return fmt.Errorf("cannot move entries in a directory marked for deletion")
 	}
 	// Get the inode to be moved
-	inode, exists := i.contents[srcEntry]
+	inode, exists := i.contents[src.Entry]
 	if !exists {
-		return fmt.Errorf("source entry '%s' does not exist", srcEntry)
+		return fmt.Errorf("source entry '%s' does not exist", src.Entry)
+	}
+	if inode.InodeType() == InodeFile && src.MustBeDir {
+		// src ended with a separator, so it ought to be a directory, but we found a file.
+		return fmt.Errorf("src entry is a file but name references a directory")
+	}
+	if inode.InodeType() == InodeFile && dst.MustBeDir {
+		// dst ended with a separator, so it ought to be a directory, but src is a file
+		return fmt.Errorf("dst's name references a directory but src is a file")
 	}
 	switch inodeTyped := inode.(type) {
 	case *FileInode:
-		if err := i.doInsertFileInode(dstEntry, inodeTyped); err != nil {
+		if err := i.doInsertFileInode(dst.Entry, inodeTyped); err != nil {
 			return err
 		}
 	case *DirectoryInode:
-		if err := i.doInsertDirectoryInode(dstEntry, inodeTyped); err != nil {
+		if err := i.doInsertDirectoryInode(dst.Entry, inodeTyped); err != nil {
 			return err
 		}
 	default:
-		return fmt.Errorf("source entry '%s' has malformed inode of type '%s'", srcEntry, inodeTyped.InodeType().String())
+		return fmt.Errorf("source entry '%s' has malformed inode of type '%s'", src.Entry, inodeTyped.InodeType().String())
 	}
-	delete(i.contents, srcEntry)
+	delete(i.contents, src.Entry)
 	return nil
 }

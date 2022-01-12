@@ -8,7 +8,6 @@ import (
 	"github.com/manderson5192/memfs/file"
 	"github.com/manderson5192/memfs/filepath"
 	"github.com/manderson5192/memfs/inode"
-	"github.com/manderson5192/memfs/utils"
 	"github.com/pkg/errors"
 )
 
@@ -148,25 +147,17 @@ func (d *directory) LookupSubdirectory(subdirectory string) (Directory, error) {
 }
 
 func (d *directory) Mkdir(subdirectory string) (Directory, error) {
-	// Validate that the path is relative and non-empty
-	if subdirectory == "" {
-		return nil, fmt.Errorf("no subdirectory provided")
-	}
-	if !filepath.IsRelativePath(subdirectory) {
+	pathInfo := filepath.ParsePath(subdirectory)
+	if !pathInfo.IsRelative {
 		return nil, fmt.Errorf("'%s' is not a relative path", subdirectory)
 	}
 	// Lookup the directory that will be parent to the subdirectory
-	subdirNameToLookup, dirNameToCreate, found := utils.RightCut(subdirectory, filepath.PathSeparator)
-	subdirInode := d.DirectoryInode
-	if found {
-		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
-		if err != nil {
-			return nil, errors.Wrapf(err, "could not create %s", subdirectory)
-		}
-		subdirInode = dirInode
+	subdirInode, err := d.DirectoryInode.LookupSubdirectory(pathInfo.ParentPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not create %s", subdirectory)
 	}
 	// Create the directory
-	newDirInode, err := subdirInode.AddDirectory(dirNameToCreate)
+	newDirInode, err := subdirInode.AddDirectory(pathInfo.Entry)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not create %s", subdirectory)
 	}
@@ -196,50 +187,37 @@ func (d *directory) ReadDir(subdirectory string) ([]DirectoryEntry, error) {
 }
 
 func (d *directory) Rmdir(subdirectory string) error {
-	// Validate that the path is relative and non-empty
-	if subdirectory == "" {
-		return fmt.Errorf("no subdirectory provided")
-	}
-	if !filepath.IsRelativePath(subdirectory) {
+	pathInfo := filepath.ParsePath(subdirectory)
+	if !pathInfo.IsRelative {
 		return fmt.Errorf("'%s' is not a relative path", subdirectory)
 	}
-	// Lookup the directory from which the named subdirectory will be removed
-	subdirNameToLookup, dirNameToDelete, found := utils.RightCut(subdirectory, filepath.PathSeparator)
-	subdirInode := d.DirectoryInode
-	if found {
-		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
-		if err != nil {
-			return errors.Wrapf(err, "could not delete '%s'", subdirectory)
-		}
-		subdirInode = dirInode
+	// Lookup the directory that is parent to the subdirectory
+	subdirInode, err := d.DirectoryInode.LookupSubdirectory(pathInfo.ParentPath)
+	if err != nil {
+		return errors.Wrapf(err, "could not delete '%s'", subdirectory)
 	}
 	// Remove the directory
-	if err := subdirInode.DeleteDirectory(dirNameToDelete); err != nil {
+	if err := subdirInode.DeleteDirectory(pathInfo.Entry); err != nil {
 		return errors.Wrapf(err, "could not delete '%s'", subdirectory)
 	}
 	return nil
 }
 
 func (d *directory) CreateFile(relativePath string) (file.File, error) {
-	// Validate that the path is relative and non-empty
-	if relativePath == "" {
-		return nil, fmt.Errorf("no path provided")
-	}
-	if !filepath.IsRelativePath(relativePath) {
+	pathInfo := filepath.ParsePath(relativePath)
+	if !pathInfo.IsRelative {
 		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
 	}
-	// Lookup the directory that will be parent to the file
-	subdirNameToLookup, fileToCreate, found := utils.RightCut(relativePath, filepath.PathSeparator)
-	subdirInode := d.DirectoryInode
-	if found {
-		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
-		if err != nil {
-			return nil, errors.Wrapf(err, "could not create %s", relativePath)
-		}
-		subdirInode = dirInode
+	if pathInfo.MustBeDir {
+		return nil, fmt.Errorf("path specifies a directory")
+	}
+	// Lookup the directory that will be parent to the relativePath
+	subdirInode, err := d.DirectoryInode.LookupSubdirectory(pathInfo.ParentPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not create '%s'", relativePath)
 	}
 	// Create the file
-	newFileInode, err := subdirInode.AddFile(fileToCreate)
+	newFileInode, err := subdirInode.AddFile(pathInfo.Entry)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not create %s", relativePath)
 	}
@@ -247,25 +225,20 @@ func (d *directory) CreateFile(relativePath string) (file.File, error) {
 }
 
 func (d *directory) OpenFile(relativePath string) (file.File, error) {
-	// Validate that the path is relative and non-empty
-	if relativePath == "" {
-		return nil, fmt.Errorf("no path provided")
-	}
-	if !filepath.IsRelativePath(relativePath) {
+	pathInfo := filepath.ParsePath(relativePath)
+	if !pathInfo.IsRelative {
 		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
 	}
-	// Lookup the directory that is parent to the file
-	subdirNameToLookup, filename, found := utils.RightCut(relativePath, filepath.PathSeparator)
-	subdirInode := d.DirectoryInode
-	if found {
-		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
-		if err != nil {
-			return nil, errors.Wrapf(err, "could not open %s", relativePath)
-		}
-		subdirInode = dirInode
+	if pathInfo.MustBeDir {
+		return nil, fmt.Errorf("path specifies a directory")
+	}
+	// Lookup the directory that is parent to the relativePath
+	subdirInode, err := d.DirectoryInode.LookupSubdirectory(pathInfo.ParentPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not open '%s'", relativePath)
 	}
 	// Get the file
-	fileInode, err := subdirInode.FileInodeEntry(filename)
+	fileInode, err := subdirInode.FileInodeEntry(pathInfo.Entry)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not open %s", relativePath)
 	}
@@ -273,30 +246,25 @@ func (d *directory) OpenFile(relativePath string) (file.File, error) {
 }
 
 func (d *directory) Stat(relativePath string) (*FileInfo, error) {
-	genericInode := inode.Inode(d.DirectoryInode)
-	if relativePath != "" {
-		// Validate that the path is relative
-		if !filepath.IsRelativePath(relativePath) {
-			return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
-		}
-		// Lookup the directory that is parent to the file
-		subdirNameToLookup, filename, found := utils.RightCut(relativePath, filepath.PathSeparator)
-		subdirInode := d.DirectoryInode
-		if found {
-			dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
-			if err != nil {
-				return nil, errors.Wrapf(err, "could not stat %s", relativePath)
-			}
-			subdirInode = dirInode
-		}
-		var err error
-		genericInode, err = subdirInode.InodeEntry(filename)
-		if err != nil {
-			return nil, errors.Wrapf(err, "could not stat %s", relativePath)
-		}
+	pathInfo := filepath.ParsePath(relativePath)
+	if !pathInfo.IsRelative {
+		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
+	}
+	// Lookup the directory that is parent to the relativePath
+	subdirInode, err := d.DirectoryInode.LookupSubdirectory(pathInfo.ParentPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not stat '%s'", relativePath)
+	}
+	// Grab the file or directory inode from subdirInode
+	genericInode, err := subdirInode.InodeEntry(pathInfo.Entry)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not stat %s", relativePath)
 	}
 	switch inodeTyped := genericInode.(type) {
 	case *inode.FileInode:
+		if pathInfo.MustBeDir {
+			return nil, fmt.Errorf("file found where directory %s expected", relativePath)
+		}
 		return &FileInfo{
 			Type: FileType,
 			Size: inodeTyped.Size(),
@@ -312,66 +280,47 @@ func (d *directory) Stat(relativePath string) (*FileInfo, error) {
 }
 
 func (d *directory) DeleteFile(relativePath string) error {
-	// Validate that the path is relative and non-empty
-	if relativePath == "" {
-		return fmt.Errorf("no path provided")
-	}
-	if !filepath.IsRelativePath(relativePath) {
+	pathInfo := filepath.ParsePath(relativePath)
+	if !pathInfo.IsRelative {
 		return fmt.Errorf("'%s' is not a relative path", relativePath)
 	}
-	// Lookup the directory from which the named subdirectory will be removed
-	subdirNameToLookup, fileToDelete, found := utils.RightCut(relativePath, filepath.PathSeparator)
-	subdirInode := d.DirectoryInode
-	if found {
-		dirInode, err := d.DirectoryInode.LookupSubdirectory(subdirNameToLookup)
-		if err != nil {
-			return errors.Wrapf(err, "could not delete '%s'", relativePath)
-		}
-		subdirInode = dirInode
+	if pathInfo.MustBeDir {
+		return fmt.Errorf("path specifies a directory")
+	}
+	// Lookup the directory that will be parent to the relativePath
+	subdirInode, err := d.DirectoryInode.LookupSubdirectory(pathInfo.ParentPath)
+	if err != nil {
+		return errors.Wrapf(err, "could not delete '%s'", relativePath)
 	}
 	// Remove the file
-	if err := subdirInode.DeleteFile(fileToDelete); err != nil {
+	if err := subdirInode.DeleteFile(pathInfo.Entry); err != nil {
 		return errors.Wrapf(err, "could not delete '%s'", relativePath)
 	}
 	return nil
 }
 
+// Parse parent
 func (d *directory) Rename(srcRelativePath, dstRelativePath string) error {
-	// Validate that both paths are relative and non-empty
-	if srcRelativePath == "" {
-		return fmt.Errorf("no source path provided")
-	}
-	if !filepath.IsRelativePath(srcRelativePath) {
+	srcPathInfo := filepath.ParsePath(srcRelativePath)
+	dstPathInfo := filepath.ParsePath(dstRelativePath)
+	// Validate that both parts are relative
+	if !srcPathInfo.IsRelative {
 		return fmt.Errorf("'%s' is not a relative path", srcRelativePath)
 	}
-	if dstRelativePath == "" {
-		return fmt.Errorf("no destination path provided")
-	}
-	if !filepath.IsRelativePath(dstRelativePath) {
+	if !dstPathInfo.IsRelative {
 		return fmt.Errorf("'%s' is not a relative path", dstRelativePath)
 	}
-	// Parse the parent directory and entry name from srcRelativePath
-	srcDirToLookup, srcEntryToMove, found := utils.RightCut(srcRelativePath, filepath.PathSeparator)
-	srcDirInode := d.DirectoryInode
-	if found {
-		dirInode, err := d.DirectoryInode.LookupSubdirectory(srcDirToLookup)
-		if err != nil {
-			return errors.Wrapf(err, "could not rename '%s' to '%s'", srcRelativePath, dstRelativePath)
-		}
-		srcDirInode = dirInode
+	// Look up the directories that are parent to src and dst
+	srcDirInode, err := d.DirectoryInode.LookupSubdirectory(srcPathInfo.ParentPath)
+	if err != nil {
+		return errors.Wrapf(err, "could not rename '%s' to '%s'", srcRelativePath, dstRelativePath)
 	}
-	// ...now do the same for dstRelativePath
-	dstDirToLookup, dstEntryToMove, found := utils.RightCut(dstRelativePath, filepath.PathSeparator)
-	dstDirInode := d.DirectoryInode
-	if found {
-		dirInode, err := d.DirectoryInode.LookupSubdirectory(dstDirToLookup)
-		if err != nil {
-			return errors.Wrapf(err, "could not rename '%s' to '%s'", srcRelativePath, dstRelativePath)
-		}
-		dstDirInode = dirInode
+	dstDirInode, err := d.DirectoryInode.LookupSubdirectory(dstPathInfo.ParentPath)
+	if err != nil {
+		return errors.Wrapf(err, "could not rename '%s' to '%s'", srcRelativePath, dstRelativePath)
 	}
 	// Move the entry
-	if err := inode.MoveEntry(srcDirInode, dstDirInode, srcEntryToMove, dstEntryToMove); err != nil {
+	if err := inode.MoveEntry(srcDirInode, dstDirInode, srcPathInfo, dstPathInfo); err != nil {
 		return errors.Wrapf(err, "could not rename '%s' to '%s'", srcRelativePath, dstRelativePath)
 	}
 	return nil
