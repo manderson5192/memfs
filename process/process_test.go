@@ -84,7 +84,6 @@ func (s *ProcessTestSuite) TestListDirectoryWithTrailingSlash() {
 func (s *ProcessTestSuite) TestRemoveDirectoryWithTrailingSlash() {
 	err := s.p.RemoveDirectory("/a/b/c/")
 	assert.Nil(s.T(), err)
-
 	entries, err := s.p.ListDirectory("/a/b/")
 	assert.Nil(s.T(), err)
 	assert.ElementsMatch(s.T(), []directory.DirectoryEntry{
@@ -93,6 +92,127 @@ func (s *ProcessTestSuite) TestRemoveDirectoryWithTrailingSlash() {
 			Type: directory.DirectoryType,
 		},
 	}, entries)
+}
+
+func (s *ProcessTestSuite) TestRemoveDirectoryOnFile() {
+	err := s.p.RemoveDirectory("/a/foobar_file")
+	assert.NotNil(s.T(), err)
+}
+
+func (s *ProcessTestSuite) TestCreateFileWithTrailingSlash() {
+	_, err := s.p.CreateFile("/filename/")
+	assert.NotNil(s.T(), err)
+}
+
+func (s *ProcessTestSuite) TestOpenFileWithTrailingSlash() {
+	_, err := s.p.OpenFile("/a/foobar_file/")
+	assert.NotNil(s.T(), err)
+}
+
+func (s *ProcessTestSuite) TestDeleteFile() {
+	err := s.p.DeleteFile("/a/foobar_file")
+	assert.Nil(s.T(), err)
+	entries, err := s.p.ListDirectory("/a/")
+	assert.Nil(s.T(), err)
+	assert.ElementsMatch(s.T(), []directory.DirectoryEntry{
+		{
+			Name: "b",
+			Type: directory.DirectoryType,
+		},
+		{
+			Name: "zzz",
+			Type: directory.DirectoryType,
+		},
+	}, entries)
+}
+
+func (s *ProcessTestSuite) TestDeleteFileWithTrailingSlash() {
+	err := s.p.DeleteFile("/a/foobar_file/")
+	assert.NotNil(s.T(), err)
+}
+
+func (s *ProcessTestSuite) TestDeleteFileOnDirectory() {
+	err := s.p.DeleteFile("/a/b")
+	assert.NotNil(s.T(), err)
+}
+
+func (s *ProcessTestSuite) TestRenameAbsoluteAndAbsolutePaths() {
+	err := s.p.Rename("/a/b", "/a/new_b")
+	assert.Nil(s.T(), err)
+
+	// Verify the resultant tree by Walk()'ing
+	paths := make([]string, 0)
+	walkFn := process.WalkFunc(func(path string, fileInfo *directory.FileInfo, err error) error {
+		assert.Nil(s.T(), err, "WalkFunc shouldn't receive any errors")
+		assert.NotNil(s.T(), fileInfo, "fileInfo should be populated on all calls to WalkFunc")
+		paths = append(paths, path)
+		return nil
+	})
+	err = s.p.Walk("/", walkFn)
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), []string{
+		"/",
+		"/a",
+		"/a/foobar_file",
+		"/a/new_b",
+		"/a/new_b/a",
+		"/a/new_b/c",
+		"/a/zzz",
+	}, paths)
+}
+
+func (s *ProcessTestSuite) TestRenameRelativeAndRelativePaths() {
+	err := s.p.ChangeDirectory("a")
+	assert.Nil(s.T(), err)
+	err = s.p.Rename("b", "../a/new_b")
+	assert.Nil(s.T(), err)
+
+	// Verify the resultant tree by Walk()'ing
+	paths := make([]string, 0)
+	walkFn := process.WalkFunc(func(path string, fileInfo *directory.FileInfo, err error) error {
+		assert.Nil(s.T(), err, "WalkFunc shouldn't receive any errors")
+		assert.NotNil(s.T(), fileInfo, "fileInfo should be populated on all calls to WalkFunc")
+		paths = append(paths, path)
+		return nil
+	})
+	err = s.p.Walk("/", walkFn)
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), []string{
+		"/",
+		"/a",
+		"/a/foobar_file",
+		"/a/new_b",
+		"/a/new_b/a",
+		"/a/new_b/c",
+		"/a/zzz",
+	}, paths)
+}
+
+func (s *ProcessTestSuite) TestRenameMixedPaths() {
+	err := s.p.ChangeDirectory("a")
+	assert.Nil(s.T(), err)
+	err = s.p.Rename("/a/b", "../a/new_b")
+	assert.Nil(s.T(), err)
+
+	// Verify the resultant tree by Walk()'ing
+	paths := make([]string, 0)
+	walkFn := process.WalkFunc(func(path string, fileInfo *directory.FileInfo, err error) error {
+		assert.Nil(s.T(), err, "WalkFunc shouldn't receive any errors")
+		assert.NotNil(s.T(), fileInfo, "fileInfo should be populated on all calls to WalkFunc")
+		paths = append(paths, path)
+		return nil
+	})
+	err = s.p.Walk("/", walkFn)
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), []string{
+		"/",
+		"/a",
+		"/a/foobar_file",
+		"/a/new_b",
+		"/a/new_b/a",
+		"/a/new_b/c",
+		"/a/zzz",
+	}, paths)
 }
 
 func (s *ProcessTestSuite) TestStatRootDir() {
