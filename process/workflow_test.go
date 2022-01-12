@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/manderson5192/memfs/filesys"
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -48,6 +49,7 @@ func (s *WorkflowTestSuite) TestFileAccessWorksAfterDeletion() {
 	// Foobar file cannot be found
 	_, err = s.p.Stat("/a/foobar_file")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENoEnt)
 
 	// Read the file's contents
 	data, err := ioutil.ReadAll(f)
@@ -73,6 +75,7 @@ func (s *WorkflowTestSuite) TestFileAccessWorksAfterDeletion() {
 	// Re-verify that the file cannot be found in the filesystem
 	_, err = s.p.Stat("/a/b/../foobar_file")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENoEnt)
 }
 
 func (s *WorkflowTestSuite) TestFileAccessWorksThroughRename() {

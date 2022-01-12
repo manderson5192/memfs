@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/manderson5192/memfs/directory"
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -142,6 +143,7 @@ func (s *DirectoryRenameTestSuite) TestRenameOverNonemptyDirSameDirectory() {
 	// Do the rename
 	err = s.RootDir.Rename("a/b/c", "a/b/foobar")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENotEmpty)
 
 	// Verify the entries after attempted renaming
 	entries, err = s.RootDir.ReadDir("a/b")
@@ -211,6 +213,7 @@ func (s *DirectoryRenameTestSuite) TestRenameOverFileSameDirectory() {
 	// Verify that /a/b/some_file was deleted
 	_, err = s.BSubdir.OpenFile("some_file")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EIsDir)
 }
 
 func (s *DirectoryRenameTestSuite) TestRenameFile() {
@@ -298,21 +301,25 @@ func (s *DirectoryRenameTestSuite) TestRenameDirectory() {
 func (s *DirectoryRenameTestSuite) TestRenameFromSpecialSelfDirectory() {
 	err := s.ASubdir.Rename(".", "new_self")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 }
 
 func (s *DirectoryRenameTestSuite) TestRenameFromSpecialParentDirectory() {
 	err := s.ASubdir.Rename("..", "new_parent")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 }
 
 func (s *DirectoryRenameTestSuite) TestRenameOverSpecialSelfDirectory() {
 	err := s.ASubdir.Rename("b", "b/c/..")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 }
 
 func (s *DirectoryRenameTestSuite) TestRenameOverSpecialParentDirectory() {
 	err := s.ASubdir.Rename("b", "b/c/..")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 }
 
 func TestDirectoryRenameTestSuite(t *testing.T) {

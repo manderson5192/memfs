@@ -2,6 +2,7 @@ package process_test
 
 import (
 	"github.com/manderson5192/memfs/directory"
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -58,6 +59,7 @@ func (s *ProcessTestSuite) TestRemoveDirectoryWithTrailingSlash() {
 func (s *ProcessTestSuite) TestRemoveDirectoryOnFile() {
 	err := s.p.RemoveDirectory("/a/foobar_file")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENotDir)
 }
 
 func (s *ProcessTestSuite) TestMakeDirectoryWithAncestorExistingDirectory() {
@@ -86,4 +88,5 @@ func (s *ProcessTestSuite) TestMakeDirectoryWithAncestorSomeAncestorsExist() {
 func (s *ProcessTestSuite) TestMakeDirectoryWithAncestorAncestorIsFile() {
 	err := s.p.MakeDirectoryWithAncestors("/a/foobar_file/subdir")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENotDir)
 }

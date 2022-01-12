@@ -8,6 +8,7 @@ import (
 	"github.com/manderson5192/memfs/directory"
 	"github.com/manderson5192/memfs/file"
 	"github.com/manderson5192/memfs/filesys"
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -126,6 +127,7 @@ func (s *FileTestSuite) TestSeek() {
 	offset, err = s.File.Seek(-10, io.SeekCurrent)
 	assert.Equal(s.T(), int64(7), offset, "offset is unchanged from failed Seek() call")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 
 	// Check the file size -- should be the original size
 	assert.Equal(s.T(), len("hello"), s.File.Size())

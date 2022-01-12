@@ -1,11 +1,12 @@
 package inode
 
 import (
-	"fmt"
 	"io"
 	"math"
 
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/utils"
+	"github.com/pkg/errors"
 )
 
 type FileInode struct {
@@ -42,7 +43,7 @@ func (i *FileInode) ReadAll() []byte {
 // TruncateAndWriteAll replaces the FileInode's data with those of d
 func (i *FileInode) TruncateAndWriteAll(d []byte) error {
 	if d == nil {
-		return fmt.Errorf("buffer is nil")
+		return errors.Wrapf(fserrors.EInval, "buffer is nil")
 	}
 	i.rwMutex.Lock()
 	defer i.rwMutex.Unlock()
@@ -55,10 +56,10 @@ func (i *FileInode) TruncateAndWriteAll(d []byte) error {
 // equal to io.EOF.
 func (i *FileInode) ReadAt(p []byte, off int64) (int, error) {
 	if p == nil {
-		return 0, fmt.Errorf("buffer is nil")
+		return 0, errors.Wrapf(fserrors.EInval, "buffer is nil")
 	}
 	if off < 0 {
-		return 0, fmt.Errorf("negative offset")
+		return 0, errors.Wrapf(fserrors.EInval, "negative offset")
 	}
 	// Edge case: since `off` is int64 and len(i.data) is `int`, we can only ever read from an offset
 	// as large as math.MaxInt
@@ -85,20 +86,20 @@ func (i *FileInode) ReadAt(p []byte, off int64) (int, error) {
 // copying begins.  It returns the number of bytes that were copied, or 0 and an error.
 func (i *FileInode) WriteAt(p []byte, off int64) (n int, err error) {
 	if p == nil {
-		return 0, fmt.Errorf("buffer is nil")
+		return 0, errors.Wrapf(fserrors.EInval, "buffer is nil")
 	}
 	if off < 0 {
-		return 0, fmt.Errorf("negative offset")
+		return 0, errors.Wrapf(fserrors.EInval, "negative offset")
 	}
 	// Edge case: since `off` is int64 and len(i.data) is `int`, we can only ever write to an offset
 	// as large as math.MaxInt
 	if off+int64(len(p)) > int64(math.MaxInt) {
-		return 0, fmt.Errorf("cannot write beyond max file size")
+		return 0, errors.Wrapf(fserrors.ENoSpace, "cannot write beyond max file size")
 	}
 	// Edge case: the above check might pass if off is close to math.MaxInt64, so check for integer
 	// wraparound
 	if off+int64(len(p)) < 0 {
-		return 0, fmt.Errorf("cannot write beyond max file size")
+		return 0, errors.Wrapf(fserrors.ENoSpace, "cannot write beyond max file size")
 	}
 	intOff := int(off)
 	i.rwMutex.Lock()

@@ -2,6 +2,7 @@ package process_test
 
 import (
 	"github.com/manderson5192/memfs/directory"
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,10 +45,12 @@ func (s *ProcessTestSuite) TestStatOnFile() {
 func (s *ProcessTestSuite) TestStatOnFileTrailingSlash() {
 	_, err := s.p.Stat("/a/foobar_file/")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENotDir)
 }
 
 func (s *ProcessTestSuite) TestStatNoExist() {
 	info, err := s.p.Stat("/noexist")
 	assert.Nil(s.T(), info)
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENoEnt)
 }

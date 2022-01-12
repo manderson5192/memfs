@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/manderson5192/memfs/directory"
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -107,6 +108,7 @@ func (s *DirectoryTestSuite) TestLookupConvolutedPath() {
 func (s *DirectoryTestSuite) TestLookupInvalidPath() {
 	_, err := s.CSubdir.LookupSubdirectory("this/path/does/not/exist")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENoEnt)
 }
 
 func (s *DirectoryTestSuite) TestMkdirFromParent() {
@@ -141,6 +143,7 @@ func (s *DirectoryTestSuite) TestMkdirInvalidPath() {
 	eSubdir, err := s.BSubdir.Mkdir("c/d/e")
 	assert.Nil(s.T(), eSubdir)
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENoEnt)
 }
 
 func (s *DirectoryTestSuite) TestReadDirOnRoot() {
@@ -191,6 +194,7 @@ func (s *DirectoryTestSuite) TestRmdir() {
 	// Verify behavior of our reference to 'c', since we can still make calls on it
 	_, err = s.CSubdir.Mkdir("should_not_be_created")
 	assert.NotNil(s.T(), err, "cannot create subdirectories of a deleted directory")
+	assert.ErrorIs(s.T(), err, fserrors.ENoEnt)
 	parentOfC, err := s.CSubdir.LookupSubdirectory(directory.ParentDirectoryEntry)
 	assert.Nil(s.T(), err, "can look up parent directory of a deleted directory")
 	assert.True(s.T(), parentOfC.Equals(s.BSubdir))
@@ -198,6 +202,7 @@ func (s *DirectoryTestSuite) TestRmdir() {
 	assert.NotNil(s.T(), err, "cannot do reverse path lookup on a deleted directory")
 	_, err = s.CSubdir.CreateFile("should_not_be_created2")
 	assert.NotNil(s.T(), err, "cannot create file in a deleted directory")
+	assert.ErrorIs(s.T(), err, fserrors.ENoEnt)
 }
 
 func (s *DirectoryTestSuite) TestRmdirNonEmptyDirectory() {
@@ -208,8 +213,10 @@ func (s *DirectoryTestSuite) TestRmdirNonEmptyDirectory() {
 func (s *DirectoryTestSuite) TestRmdirSelf() {
 	err := s.CSubdir.Rmdir(".")
 	assert.NotNil(s.T(), err, "cannot remove self directory entry")
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 	err = s.CSubdir.Rmdir("..")
 	assert.NotNil(s.T(), err, "cannot remove parent directory entry")
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 }
 
 func (s *DirectoryTestSuite) TestCreateOpenDeleteFile() {
@@ -217,6 +224,7 @@ func (s *DirectoryTestSuite) TestCreateOpenDeleteFile() {
 	file, err := s.CSubdir.OpenFile("a_file")
 	assert.Nil(s.T(), file)
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENoEnt)
 
 	// Create the file
 	file, err = s.CSubdir.CreateFile("a_file")
@@ -247,6 +255,7 @@ func (s *DirectoryTestSuite) TestCreateOpenDeleteFile() {
 func (s *DirectoryTestSuite) TestDeleteFileOnDirectory() {
 	err := s.RootDir.DeleteFile("a/b")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EIsDir)
 }
 
 func TestDirectoryTestSuite(t *testing.T) {

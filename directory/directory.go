@@ -7,6 +7,7 @@ import (
 
 	"github.com/manderson5192/memfs/file"
 	"github.com/manderson5192/memfs/filepath"
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
 	"github.com/pkg/errors"
 )
@@ -209,7 +210,7 @@ func (d *directory) CreateFile(relativePath string) (file.File, error) {
 		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
 	}
 	if pathInfo.MustBeDir {
-		return nil, fmt.Errorf("path specifies a directory")
+		return nil, errors.Wrapf(fserrors.EInval, "path specifies a directory")
 	}
 	// Lookup the directory that will be parent to the relativePath
 	subdirInode, err := d.DirectoryInode.LookupSubdirectory(pathInfo.ParentPath)
@@ -230,7 +231,7 @@ func (d *directory) OpenFile(relativePath string) (file.File, error) {
 		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
 	}
 	if pathInfo.MustBeDir {
-		return nil, fmt.Errorf("path specifies a directory")
+		return nil, errors.Wrapf(fserrors.EInval, "path specifies a directory")
 	}
 	// Lookup the directory that is parent to the relativePath
 	subdirInode, err := d.DirectoryInode.LookupSubdirectory(pathInfo.ParentPath)
@@ -263,7 +264,7 @@ func (d *directory) Stat(relativePath string) (*FileInfo, error) {
 	switch inodeTyped := genericInode.(type) {
 	case *inode.FileInode:
 		if pathInfo.MustBeDir {
-			return nil, fmt.Errorf("file found where directory %s expected", relativePath)
+			return nil, errors.Wrapf(fserrors.ENotDir, "file found where directory %s expected", relativePath)
 		}
 		return &FileInfo{
 			Type: FileType,
@@ -285,7 +286,7 @@ func (d *directory) DeleteFile(relativePath string) error {
 		return fmt.Errorf("'%s' is not a relative path", relativePath)
 	}
 	if pathInfo.MustBeDir {
-		return fmt.Errorf("path specifies a directory")
+		return errors.Wrapf(fserrors.EInval, "path specifies a directory")
 	}
 	// Lookup the directory that will be parent to the relativePath
 	subdirInode, err := d.DirectoryInode.LookupSubdirectory(pathInfo.ParentPath)

@@ -1,6 +1,9 @@
 package process_test
 
-import "github.com/stretchr/testify/assert"
+import (
+	"github.com/manderson5192/memfs/fserrors"
+	"github.com/stretchr/testify/assert"
+)
 
 func (s *ProcessTestSuite) TestFindAll() {
 	paths, err := s.p.FindAll(".", "a")
@@ -17,6 +20,7 @@ func (s *ProcessTestSuite) TestFindFirstMatchingFile() {
 func (s *ProcessTestSuite) TestFindFirstMatchingFileNoMatchExists() {
 	path, err := s.p.FindFirstMatchingFile("/", "^a.*")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.ENoEnt)
 	assert.Equal(s.T(), "", path)
 }
 

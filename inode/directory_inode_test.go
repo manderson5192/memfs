@@ -3,6 +3,7 @@ package inode_test
 import (
 	"testing"
 
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -77,6 +78,7 @@ func (s *DirectoryInodeSuite) TestLookupSubdirectoryEmptyString() {
 func (s *DirectoryInodeSuite) TestLookupSubdirectoryAbsolutePath() {
 	lookedUp, err := s.Root.LookupSubdirectory("/")
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 	assert.Nil(s.T(), lookedUp)
 }
 

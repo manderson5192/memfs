@@ -1,11 +1,12 @@
 package file
 
 import (
-	"fmt"
 	"io"
 	"sync"
 
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
+	"github.com/pkg/errors"
 )
 
 // File is a typical file abstraction, representing a file descriptor and an offset.  To hold a
@@ -87,11 +88,11 @@ func (f *file) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekEnd:
 		offset = int64(f.Size()) + offset
 	default:
-		return f.offset, fmt.Errorf("invalid whence value %d", whence)
+		return f.offset, errors.Wrapf(fserrors.EInval, "invalid whence value %d", whence)
 	}
 	// check if the resultant offset is valid
 	if offset < 0 {
-		return f.offset, fmt.Errorf("negative offset")
+		return f.offset, errors.Wrapf(fserrors.EInval, "negative offset")
 	}
 	f.offset = offset
 	return f.offset, nil

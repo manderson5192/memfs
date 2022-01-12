@@ -4,6 +4,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -46,6 +47,7 @@ func (s *FileInodeTestSuite) TestReadAndWriteAll() {
 func (s *FileInodeTestSuite) TestTruncateAndWriteAllWithNil() {
 	err := s.FileInode.TruncateAndWriteAll(nil)
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 }
 
 func (s *FileInodeTestSuite) TestReadAtEmptyFile() {
@@ -112,12 +114,14 @@ func (s *FileInodeTestSuite) TestReadAtNil() {
 	n, err := s.FileInode.ReadAt(nil, 0)
 	assert.Zero(s.T(), n)
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 }
 
 func (s *FileInodeTestSuite) TestReadAtNegativeOffset() {
 	n, err := s.FileInode.ReadAt(nil, -100)
 	assert.Zero(s.T(), n)
 	assert.NotNil(s.T(), err)
+	assert.ErrorIs(s.T(), err, fserrors.EInval)
 }
 
 func (s *FileInodeTestSuite) TestWriteAtBeginningOfEmptyFile() {

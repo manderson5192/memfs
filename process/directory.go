@@ -5,6 +5,7 @@ import (
 
 	"github.com/manderson5192/memfs/directory"
 	"github.com/manderson5192/memfs/filepath"
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/pkg/errors"
 )
 
@@ -45,7 +46,7 @@ func (p *processContext) MakeDirectoryWithAncestors(path string) error {
 		baseDir, lookupErr = baseDir.LookupSubdirectory(pathPart)
 		if lookupErr != nil {
 			errToWrap := mkdirErr
-			if errToWrap == nil {
+			if errors.Is(mkdirErr, fserrors.EExist) {
 				errToWrap = lookupErr
 			}
 			ancestor := filepath.Join(pathParts[0 : idx+1]...)

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/manderson5192/memfs/filepath"
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/utils"
 	"github.com/pkg/errors"
 )
@@ -85,7 +86,7 @@ func (i *DirectoryInode) ReverseLookupEntry(child *DirectoryInode) (string, erro
 			return entry, nil
 		}
 	}
-	return "", fmt.Errorf("entry for directory inode was not found")
+	return "", errors.Wrapf(fserrors.ENoEnt, "entry for directory inode was not found")
 }
 
 // IsRootDirectoryInode returns whether this DirectoryInode corresponds to the filesystem's root
@@ -102,17 +103,17 @@ func (i *DirectoryInode) IsRootDirectoryInode() bool {
 func (i *DirectoryInode) AddDirectory(name string) (*DirectoryInode, error) {
 	// Check that this directory entry doesn't contain the path separator
 	if strings.Contains(name, filepath.PathSeparator) {
-		return nil, fmt.Errorf("cannot add subdirectory inode for a name containing path separator %s: %s", filepath.PathSeparator, name)
+		return nil, errors.Wrapf(fserrors.EInval, "cannot add subdirectory inode for a name containing path separator %s: %s", filepath.PathSeparator, name)
 	}
 	i.rwMutex.Lock()
 	defer i.rwMutex.Unlock()
 	// Disallow adding subdirectories on directories that have already been marked as deleted
 	if i.deleted {
-		return nil, fmt.Errorf("cannot add entries to a directory marked for deletion")
+		return nil, errors.Wrapf(fserrors.ENoEnt, "cannot add entries to a directory marked for deletion")
 	}
 	// Make sure that the entry doesn't already exist
 	if _, exists := i.contents[name]; exists {
-		return nil, fmt.Errorf("directory entry '%s' already exists", name)
+		return nil, errors.Wrapf(fserrors.EExist, "directory entry '%s' already exists", name)
 	}
 	subdirInode := NewDirectoryInode(i)
 	i.contents[name] = subdirInode
@@ -124,17 +125,17 @@ func (i *DirectoryInode) AddDirectory(name string) (*DirectoryInode, error) {
 func (i *DirectoryInode) AddFile(name string) (*FileInode, error) {
 	// Check that this directory entry doesn't contain the path separator
 	if strings.Contains(name, filepath.PathSeparator) {
-		return nil, fmt.Errorf("cannot add file inode for a name containing path separator %s: %s", filepath.PathSeparator, name)
+		return nil, errors.Wrapf(fserrors.EInval, "cannot add file inode for a name containing path separator %s: %s", filepath.PathSeparator, name)
 	}
 	i.rwMutex.Lock()
 	defer i.rwMutex.Unlock()
 	// Disallow adding files to directories that have already been marked as deleted
 	if i.deleted {
-		return nil, fmt.Errorf("cannot add entries to a directory marked for deletion")
+		return nil, errors.Wrapf(fserrors.ENoEnt, "cannot add entries to a directory marked for deletion")
 	}
 	// Make sure that the entry doesn't already exist
 	if _, exists := i.contents[name]; exists {
-		return nil, fmt.Errorf("directory entry '%s' already exists", name)
+		return nil, errors.Wrapf(fserrors.EExist, "directory entry '%s' already exists", name)
 	}
 	fileInode := NewFileInode()
 	i.contents[name] = fileInode
@@ -146,11 +147,11 @@ func (i *DirectoryInode) AddFile(name string) (*FileInode, error) {
 func (i *DirectoryInode) doInodeEntry(entry string) (Inode, error) {
 	// Check that this directory entry doesn't contain the path separator
 	if strings.Contains(entry, filepath.PathSeparator) {
-		return nil, fmt.Errorf("entry %s contains illegal character %s", entry, filepath.PathSeparator)
+		return nil, errors.Wrapf(fserrors.EInval, "entry %s contains illegal character %s", entry, filepath.PathSeparator)
 	}
 	inode, exists := i.contents[entry]
 	if !exists {
-		return nil, fmt.Errorf("entry '%s' does not exist", entry)
+		return nil, errors.Wrapf(fserrors.ENoEnt, "entry '%s' does not exist", entry)
 	}
 	return inode, nil
 }
@@ -171,12 +172,12 @@ func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, err
 	}
 	dirInode, ok := inode.(*DirectoryInode)
 	if !ok {
-		return nil, fmt.Errorf("entry '%s' is not a directory", entry)
+		return nil, errors.Wrapf(fserrors.ENotDir, "entry '%s' is not a directory", entry)
 	}
 	// Deny access to DirectoryInodes after they have been marked as deleted.  This case should be
 	// rare, but is technically possible
 	if dirInode.isDeleted() {
-		return nil, fmt.Errorf("entry '%s' does not exist", entry)
+		return nil, errors.Wrapf(fserrors.ENoEnt, "entry '%s' does not exist", entry)
 	}
 	return dirInode, nil
 }
@@ -191,7 +192,7 @@ func (i *DirectoryInode) FileInodeEntry(entry string) (*FileInode, error) {
 	}
 	fileInode, ok := inode.(*FileInode)
 	if !ok {
-		return nil, fmt.Errorf("entry '%s' is not a file", entry)
+		return nil, errors.Wrapf(fserrors.EIsDir, "entry '%s' is not a file", entry)
 	}
 	return fileInode, nil
 }
@@ -227,7 +228,7 @@ func (i *DirectoryInode) LookupSubdirectory(subdirectory string) (*DirectoryInod
 		return i, nil
 	}
 	if !filepath.IsRelativePath(subdirectory) {
-		return nil, fmt.Errorf("'%s' is not a relative path", subdirectory)
+		return nil, errors.Wrapf(fserrors.EInval, "'%s' is not a relative path", subdirectory)
 	}
 	currentDirInode := i
 	currentSubdirectory := subdirectory
@@ -260,7 +261,7 @@ func (i *DirectoryInode) delete() error {
 		if entry == filepath.SelfDirectoryEntry || entry == filepath.ParentDirectoryEntry {
 			continue
 		}
-		return fmt.Errorf("directory is not empty")
+		return errors.Wrapf(fserrors.ENotEmpty, "directory is not empty")
 	}
 	// mark as deleted
 	i.deleted = true
@@ -278,16 +279,16 @@ func (i *DirectoryInode) isDeleted() bool {
 func (i *DirectoryInode) doDeleteDirectory(entry string) error {
 	// Check: disallow removing the special "." and ".." directories
 	if entry == "." || entry == ".." {
-		return fmt.Errorf("refusing to remove '.' or '..' directory: skipping '%s", entry)
+		return errors.Wrapf(fserrors.EInval, "refusing to remove '.' or '..' directory: skipping '%s", entry)
 	}
 	// Get the DirectoryInode for entry
 	inode, exists := i.contents[entry]
 	if !exists {
-		return fmt.Errorf("entry '%s' does not exist", entry)
+		return errors.Wrapf(fserrors.ENoEnt, "entry '%s' does not exist", entry)
 	}
 	dirInode, ok := inode.(*DirectoryInode)
 	if !ok {
-		return fmt.Errorf("entry '%s' is not a directory", entry)
+		return errors.Wrapf(fserrors.ENotDir, "entry '%s' is not a directory", entry)
 	}
 	// Make sure we can successfully delete entry's directory
 	if err := dirInode.delete(); err != nil {
@@ -310,11 +311,11 @@ func (i *DirectoryInode) doDeleteFile(entry string) error {
 	// Get the FileInode for entry
 	inode, exists := i.contents[entry]
 	if !exists {
-		return fmt.Errorf("entry '%s' does not exist", entry)
+		return errors.Wrapf(fserrors.ENoEnt, "entry '%s' does not exist", entry)
 	}
 	_, ok := inode.(*FileInode)
 	if !ok {
-		return fmt.Errorf("entry '%s' is not a file", entry)
+		return errors.Wrapf(fserrors.EIsDir, "entry '%s' is not a file", entry)
 	}
 	// Remove the entry
 	delete(i.contents, entry)
@@ -387,15 +388,15 @@ func (i *DirectoryInode) SetParent(parent *DirectoryInode) {
 func MoveEntry(srcParentInode, dstParentInode *DirectoryInode, src, dst *filepath.PathInfo) error {
 	// Check that srcEntry is not the special self or parent directory entries
 	if src.Entry == filepath.SelfDirectoryEntry || src.Entry == filepath.ParentDirectoryEntry {
-		return fmt.Errorf("cannot move '.' or '..' entries")
+		return errors.Wrapf(fserrors.EInval, "cannot move '.' or '..' entries")
 	}
 	// Check the same for dstEntry
 	if dst.Entry == filepath.SelfDirectoryEntry || dst.Entry == filepath.ParentDirectoryEntry {
-		return fmt.Errorf("cannot overwrite '.' or '..' entries")
+		return errors.Wrapf(fserrors.EInval, "cannot overwrite '.' or '..' entries")
 	}
 	// Check that the dst entry name doesn't contain the path separator
 	if strings.Contains(dst.Entry, filepath.PathSeparator) {
-		return fmt.Errorf("entry name '%s' contains the path separator", dst.Entry)
+		return errors.Wrapf(fserrors.EInval, "entry name '%s' contains the path separator", dst.Entry)
 	}
 	// Edge case: srcParentInode and dstParentInode are the same.  That requires a different locking
 	// discipline, so we special-case it
@@ -408,20 +409,20 @@ func MoveEntry(srcParentInode, dstParentInode *DirectoryInode, src, dst *filepat
 	defer dstParentInode.rwMutex.Unlock()
 	// Disallow adding files to directories that have already been marked as deleted
 	if dstParentInode.deleted {
-		return fmt.Errorf("cannot add entries to a directory marked for deletion")
+		return errors.Wrapf(fserrors.ENoEnt, "cannot add entries to a directory marked for deletion")
 	}
 	// Get the inode for the srcEntry
 	srcInode, exists := srcParentInode.contents[src.Entry]
 	if !exists {
-		return fmt.Errorf("source entry '%s' does not exist", src.Entry)
+		return errors.Wrapf(fserrors.ENoEnt, "source entry '%s' does not exist", src.Entry)
 	}
 	if srcInode.InodeType() == InodeFile && src.MustBeDir {
 		// src ended with a separator, so it ought to be a directory, but we found a file.
-		return fmt.Errorf("src entry is a file but name references a directory")
+		return errors.Wrapf(fserrors.ENotDir, "src entry is a file but name references a directory")
 	}
 	if srcInode.InodeType() == InodeFile && dst.MustBeDir {
 		// dst ended with a separator, so it ought to be a directory, but src is a file
-		return fmt.Errorf("dst's name references a directory but src is a file")
+		return errors.Wrapf(fserrors.ENotDir, "dst's name references a directory but src is a file")
 	}
 	// Insert the inode into its new location
 	switch srcInodeTyped := srcInode.(type) {
@@ -450,7 +451,7 @@ func (i *DirectoryInode) renameEntry(src, dst *filepath.PathInfo) error {
 	defer i.rwMutex.Unlock()
 	// Disallow moving files in directories that have already been marked as deleted
 	if i.deleted {
-		return fmt.Errorf("cannot move entries in a directory marked for deletion")
+		return errors.Wrapf(fserrors.ENoEnt, "cannot move entries in a directory marked for deletion")
 	}
 	// Get the inode to be moved
 	inode, exists := i.contents[src.Entry]
@@ -459,11 +460,11 @@ func (i *DirectoryInode) renameEntry(src, dst *filepath.PathInfo) error {
 	}
 	if inode.InodeType() == InodeFile && src.MustBeDir {
 		// src ended with a separator, so it ought to be a directory, but we found a file.
-		return fmt.Errorf("src entry is a file but name references a directory")
+		return errors.Wrapf(fserrors.ENotDir, "src entry is a file but name references a directory")
 	}
 	if inode.InodeType() == InodeFile && dst.MustBeDir {
 		// dst ended with a separator, so it ought to be a directory, but src is a file
-		return fmt.Errorf("dst's name references a directory but src is a file")
+		return errors.Wrapf(fserrors.ENotDir, "dst's name references a directory but src is a file")
 	}
 	switch inodeTyped := inode.(type) {
 	case *FileInode:

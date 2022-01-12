@@ -6,6 +6,7 @@ import (
 
 	"github.com/manderson5192/memfs/directory"
 	"github.com/manderson5192/memfs/filepath"
+	"github.com/manderson5192/memfs/fserrors"
 	"github.com/pkg/errors"
 )
 
@@ -59,7 +60,7 @@ func (p *processContext) FindFirstMatchingFile(subtreePath string, regex string)
 		return "", errors.Wrapf(err, "unable to find first file matching '%s' under '%s'", regex, subtreePath)
 	}
 	if !matchFound {
-		return "", fmt.Errorf("no match found")
+		return "", errors.Wrapf(fserrors.ENoEnt, "no match found")
 	}
 	return matchingPath, nil
 }
