@@ -16,6 +16,10 @@ type ProcessFilesystemContext interface {
 	// MakeDirectory creates the specified directory.  Accepts absolute or relative paths.  Returns nil
 	// if successful, an error otherwise
 	MakeDirectory(dir string) error
+	// MakeDirectoryWithAncestors creates the specified path and any ancestor directories that do
+	// not already exists.  Unlike MakeDirectory(), this method will not return an error if the
+	// specific path is a directory already exists.  Returns an error otherwise
+	MakeDirectoryWithAncestors(path string) error
 	// ListDirectory returns an array of DirectoryEntry in the specified directory.  Accepts
 	// absolute or relative path names.  Returns an array if successful, an error otherwise
 	ListDirectory(dir string) ([]directory.DirectoryEntry, error)

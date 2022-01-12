@@ -59,3 +59,31 @@ func (s *ProcessTestSuite) TestRemoveDirectoryOnFile() {
 	err := s.p.RemoveDirectory("/a/foobar_file")
 	assert.NotNil(s.T(), err)
 }
+
+func (s *ProcessTestSuite) TestMakeDirectoryWithAncestorExistingDirectory() {
+	err := s.p.MakeDirectoryWithAncestors("/a/b/c")
+	assert.Nil(s.T(), err)
+}
+
+func (s *ProcessTestSuite) TestMakeDirectoryWithAncestorEntirelyNewDirectory() {
+	err := s.p.MakeDirectoryWithAncestors("/x/y/z")
+	assert.Nil(s.T(), err)
+	info, err := s.p.Stat("/x/y/z")
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), directory.DirectoryType, info.Type)
+	assert.Equal(s.T(), 0, info.Size)
+}
+
+func (s *ProcessTestSuite) TestMakeDirectoryWithAncestorSomeAncestorsExist() {
+	err := s.p.MakeDirectoryWithAncestors("/a/b/c/d")
+	assert.Nil(s.T(), err)
+	info, err := s.p.Stat("/a/b/c/d")
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), directory.DirectoryType, info.Type)
+	assert.Equal(s.T(), 0, info.Size)
+}
+
+func (s *ProcessTestSuite) TestMakeDirectoryWithAncestorAncestorIsFile() {
+	err := s.p.MakeDirectoryWithAncestors("/a/foobar_file/subdir")
+	assert.NotNil(s.T(), err)
+}

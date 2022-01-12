@@ -42,7 +42,8 @@ directories.)
 * Operations on paths:
     - [x] When doing basic operations (changing the current working directory, creating or moving files or folders, etc), you can use absolute paths instead of only operating on objects in the current working directory.
     - [x] You can use relative paths (relative to the current working directory) as well, including the special “..” path that refers to the parent directory.
-    - [ ] When creating or moving items to a new path, you can choose to automatically create any intermediate directories on the path that don’t exist yet.
+    - [x] When creating directories, you can choose to automatically create any intermediate directories on the path that don’t exist yet.
+        * NOTE: I opted not to implement creating intermediate directories during file creation or rename() operations because these are not operations that are commonly performed (or supported) on *Nix systems
 * Walk a subtree
     - [x] You can walk through all the recursive contents of a directory, invoking a passed-in function on each child directory/file: `process.Walk()`
     - [x] While walking, the passed-in function can arbitrarily choose not to recurse into certain subdirectories: `process.Walk()`
