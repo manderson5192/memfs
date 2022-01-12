@@ -9,11 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	SelfDirectoryEntry   string = "."
-	ParentDirectoryEntry string = ".."
-)
-
 type DirectoryInode struct {
 	basicInode
 	deleted  bool
@@ -24,8 +19,8 @@ func NewRootDirectoryInode() *DirectoryInode {
 	rootDirInode := &DirectoryInode{
 		contents: map[string]Inode{},
 	}
-	rootDirInode.contents[SelfDirectoryEntry] = rootDirInode
-	rootDirInode.contents[ParentDirectoryEntry] = rootDirInode
+	rootDirInode.contents[filepath.SelfDirectoryEntry] = rootDirInode
+	rootDirInode.contents[filepath.ParentDirectoryEntry] = rootDirInode
 	return rootDirInode
 }
 
@@ -33,8 +28,8 @@ func NewDirectoryInode(parent *DirectoryInode) *DirectoryInode {
 	newDirInode := &DirectoryInode{
 		contents: map[string]Inode{},
 	}
-	newDirInode.contents[SelfDirectoryEntry] = newDirInode
-	newDirInode.contents[ParentDirectoryEntry] = parent
+	newDirInode.contents[filepath.SelfDirectoryEntry] = newDirInode
+	newDirInode.contents[filepath.ParentDirectoryEntry] = parent
 	return newDirInode
 }
 
@@ -47,7 +42,7 @@ func (i *DirectoryInode) Size() int {
 	defer i.rwMutex.RUnlock()
 	numEntries := 0
 	for name := range i.contents {
-		if name == SelfDirectoryEntry || name == ParentDirectoryEntry {
+		if name == filepath.SelfDirectoryEntry || name == filepath.ParentDirectoryEntry {
 			continue
 		}
 		numEntries++
@@ -59,7 +54,7 @@ func (i *DirectoryInode) Size() int {
 func (i *DirectoryInode) Parent() *DirectoryInode {
 	i.rwMutex.RLock()
 	defer i.rwMutex.RUnlock()
-	parentInode, parentExists := i.contents[ParentDirectoryEntry]
+	parentInode, parentExists := i.contents[filepath.ParentDirectoryEntry]
 	if !parentExists {
 		// This shouldn't happen, so we panic on the condition
 		panic("parent entry for directory inode does not exist")
@@ -79,7 +74,7 @@ func (i *DirectoryInode) ReverseLookupEntry(child *DirectoryInode) (string, erro
 	defer i.rwMutex.RUnlock()
 	for entry, inode := range i.contents {
 		// Ignore self and parent directory references
-		if entry == SelfDirectoryEntry || entry == ParentDirectoryEntry {
+		if entry == filepath.SelfDirectoryEntry || entry == filepath.ParentDirectoryEntry {
 			continue
 		}
 		// Ignore non-directory inodes
@@ -211,7 +206,7 @@ func (i *DirectoryInode) InodeEntries() []InodeEntry {
 	defer i.rwMutex.RUnlock()
 	toReturn := make([]InodeEntry, 0, len(i.contents))
 	for entryName, inode := range i.contents {
-		if entryName == SelfDirectoryEntry || entryName == ParentDirectoryEntry {
+		if entryName == filepath.SelfDirectoryEntry || entryName == filepath.ParentDirectoryEntry {
 			continue
 		}
 		toReturn = append(toReturn, InodeEntry{
@@ -262,7 +257,7 @@ func (i *DirectoryInode) delete() error {
 	}
 	// Check: is the directory empty?
 	for entry := range i.contents {
-		if entry == SelfDirectoryEntry || entry == ParentDirectoryEntry {
+		if entry == filepath.SelfDirectoryEntry || entry == filepath.ParentDirectoryEntry {
 			continue
 		}
 		return fmt.Errorf("directory is not empty")
@@ -386,16 +381,16 @@ func (i *DirectoryInode) doInsertDirectoryInode(entry string, newEntry *Director
 func (i *DirectoryInode) SetParent(parent *DirectoryInode) {
 	i.rwMutex.Lock()
 	defer i.rwMutex.Unlock()
-	i.contents[ParentDirectoryEntry] = parent
+	i.contents[filepath.ParentDirectoryEntry] = parent
 }
 
 func MoveEntry(srcParentInode, dstParentInode *DirectoryInode, srcEntry, dstEntry string) error {
 	// Check that srcEntry is not the special self or parent directory entries
-	if srcEntry == SelfDirectoryEntry || srcEntry == ParentDirectoryEntry {
+	if srcEntry == filepath.SelfDirectoryEntry || srcEntry == filepath.ParentDirectoryEntry {
 		return fmt.Errorf("cannot move '.' or '..' entries")
 	}
 	// Check the same for dstEntry
-	if dstEntry == SelfDirectoryEntry || dstEntry == ParentDirectoryEntry {
+	if dstEntry == filepath.SelfDirectoryEntry || dstEntry == filepath.ParentDirectoryEntry {
 		return fmt.Errorf("cannot overwrite '.' or '..' entries")
 	}
 	// Check that the dst entry name doesn't contain the path separator

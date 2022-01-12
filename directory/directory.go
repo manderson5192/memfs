@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	SelfDirectoryEntry   = inode.SelfDirectoryEntry
-	ParentDirectoryEntry = inode.ParentDirectoryEntry
+	SelfDirectoryEntry   = filepath.SelfDirectoryEntry
+	ParentDirectoryEntry = filepath.ParentDirectoryEntry
 )
 
 type DirectoryEntryType int
