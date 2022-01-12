@@ -46,6 +46,18 @@ type ProcessFilesystemContext interface {
 	//
 	// The files are walked in lexical order, which makes the output deterministic.
 	Walk(path string, f WalkFunc) error
+	// FindAll walks the subtree rooted at subtreePath, collecting every path for files and
+	// directories whose names matche the supplied entry name.  It returns these paths or an error
+	FindAll(subtreePath, name string) ([]string, error)
+	// FindFirstMatchingFile walks the subtree rooted at subtreePath and returns the path of the
+	// first file whose name matches the supplied regex.  Returns the empty string and an error if
+	// the regex is invalid, if the underlying Walk() call fails, or if no match is found.
+	//
+	// regex is evaluated against filenames using a call to Go's regexp.MatchString(regex, filename).
+	// This method may return true if regex matches part but not all of filename (i.e. "a.*" is a
+	// match for "foobar").  To avoid tricky bugs, clients should make thoughtful use of '^' and '$'
+	// in regexes.
+	FindFirstMatchingFile(subtreePath string, regex string) (string, error)
 }
 
 type processContext struct {
