@@ -9,6 +9,7 @@ import (
 	"github.com/manderson5192/memfs/filepath"
 	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
+	"github.com/manderson5192/memfs/modes"
 	"github.com/pkg/errors"
 )
 
@@ -84,8 +85,9 @@ type Directory interface {
 	Rmdir(subdirectory string) error
 	// CreateFile creates a new file at the specified relative path, or returns an error
 	CreateFile(relativePath string) (file.File, error)
-	// OpenFile returns a reference to the file at the specified relative path, or returns an error
-	OpenFile(relativePath string) (file.File, error)
+	// OpenFile returns a reference to the specified relative path in the specified mode, or returns
+	// an error
+	OpenFile(relativePath string, mode int) (file.File, error)
 	// DeleteFile removes the specified file, which must be at a path relative to the current
 	// directory.  It returns an error if it is unsuccessful
 	DeleteFile(relativePath string) error
@@ -205,27 +207,14 @@ func (d *directory) Rmdir(subdirectory string) error {
 }
 
 func (d *directory) CreateFile(relativePath string) (file.File, error) {
-	pathInfo := filepath.ParsePath(relativePath)
-	if !pathInfo.IsRelative {
-		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
-	}
-	if pathInfo.MustBeDir {
-		return nil, errors.Wrapf(fserrors.EInval, "path specifies a directory")
-	}
-	// Lookup the directory that will be parent to the relativePath
-	subdirInode, err := d.DirectoryInode.LookupSubdirectory(pathInfo.ParentPath)
+	f, err := d.OpenFile(relativePath, modes.OpenFileModeEqualToCreateFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not create '%s'", relativePath)
 	}
-	// Create the file
-	newFileInode, err := subdirInode.AddFile(pathInfo.Entry)
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not create %s", relativePath)
-	}
-	return file.NewFile(newFileInode), nil
+	return f, nil
 }
 
-func (d *directory) OpenFile(relativePath string) (file.File, error) {
+func (d *directory) OpenFile(relativePath string, mode int) (file.File, error) {
 	pathInfo := filepath.ParsePath(relativePath)
 	if !pathInfo.IsRelative {
 		return nil, fmt.Errorf("'%s' is not a relative path", relativePath)
@@ -239,11 +228,23 @@ func (d *directory) OpenFile(relativePath string) (file.File, error) {
 		return nil, errors.Wrapf(err, "could not open '%s'", relativePath)
 	}
 	// Get the file
-	fileInode, err := subdirInode.FileInodeEntry(pathInfo.Entry)
+	var fileInode *inode.FileInode
+	if modes.IsCreateMode(mode) {
+		fileInode, err = subdirInode.CreateFileInodeEntry(pathInfo.Entry, modes.IsExclusiveMode(mode))
+	} else {
+		fileInode, err = subdirInode.FileInodeEntry(pathInfo.Entry)
+	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not open %s", relativePath)
 	}
-	return file.NewFile(fileInode), nil
+	// Truncate the file if the mode says to do so
+	if modes.IsTruncateMode(mode) {
+		err := fileInode.TruncateAndWriteAll(make([]byte, 0))
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not truncate %s on open", relativePath)
+		}
+	}
+	return file.NewFile(fileInode, mode), nil
 }
 
 func (d *directory) Stat(relativePath string) (*FileInfo, error) {

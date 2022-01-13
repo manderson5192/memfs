@@ -14,6 +14,10 @@ const (
 	O_EXCL   = os.O_EXCL
 )
 
+const (
+	OpenFileModeEqualToCreateFile = O_RDWR | O_CREATE | O_EXCL
+)
+
 func CombineModes(modes ...int) int {
 	toReturn := 0
 	for _, mode := range modes {

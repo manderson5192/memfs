@@ -3,6 +3,7 @@ package process_test
 import (
 	"github.com/manderson5192/memfs/directory"
 	"github.com/manderson5192/memfs/fserrors"
+	"github.com/manderson5192/memfs/modes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,7 +14,7 @@ func (s *ProcessTestSuite) TestCreateFileWithTrailingSlash() {
 }
 
 func (s *ProcessTestSuite) TestOpenFileWithTrailingSlash() {
-	_, err := s.p.OpenFile("/a/foobar_file/")
+	_, err := s.p.OpenFile("/a/foobar_file/", modes.CombineModes(modes.O_RDWR))
 	assert.NotNil(s.T(), err)
 	assert.ErrorIs(s.T(), err, fserrors.EInval)
 }

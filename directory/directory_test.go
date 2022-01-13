@@ -6,6 +6,7 @@ import (
 	"github.com/manderson5192/memfs/directory"
 	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
+	"github.com/manderson5192/memfs/modes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -221,7 +222,7 @@ func (s *DirectoryTestSuite) TestRmdirSelf() {
 
 func (s *DirectoryTestSuite) TestCreateOpenDeleteFile() {
 	// Open the file before it is created
-	file, err := s.CSubdir.OpenFile("a_file")
+	file, err := s.CSubdir.OpenFile("a_file", modes.CombineModes(modes.O_RDWR))
 	assert.Nil(s.T(), file)
 	assert.NotNil(s.T(), err)
 	assert.ErrorIs(s.T(), err, fserrors.ENoEnt)
@@ -232,7 +233,7 @@ func (s *DirectoryTestSuite) TestCreateOpenDeleteFile() {
 	assert.NotNil(s.T(), file)
 
 	// Open the file now that is has been created
-	sameFile, err := s.RootDir.OpenFile("a/b/c/a_file")
+	sameFile, err := s.RootDir.OpenFile("a/b/c/a_file", modes.CombineModes(modes.O_RDWR))
 	assert.Nil(s.T(), err)
 	assert.NotNil(s.T(), sameFile)
 	assert.True(s.T(), file.Equals(sameFile))

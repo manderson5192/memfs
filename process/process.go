@@ -27,11 +27,20 @@ type ProcessFilesystemContext interface {
 	// nil if successful, an error otherwise
 	RemoveDirectory(dir string) error
 	// CreateFile creates the specified file and returns a reference to it.  Accepts absolute or
-	// relative paths.  Returns nil and an error if unsuccessful
+	// relative paths.  Returns nil and an error if unsuccessful.  This call is equivalent to
+	// OpenFile(path, O_RDWR|O_CREATE|O_EXCL)
 	CreateFile(path string) (file.File, error)
-	// OpenFile opens the specified file and returns a reference to it.  Accepts absolute or
-	// relative paths.  Returns nil and an error if unsuccessful
-	OpenFile(path string) (file.File, error)
+	// OpenFile opens the specified file in the specified mode and returns a reference to it.
+	// Accepts absolute or relative paths.  Returns nil and an error if unsuccessful.  It supports
+	// the following modes, which can be OR'd together (as with open(2) in Linux):
+	//	* O_RDONLY: open in read-only mode
+	//	* O_WRONLY: open in write-only mode
+	//	* O_RDWR: open in read/write mode
+	//	* O_CREATE: create the file if it doesn't exist
+	//	* O_APPEND: append to the file on each write (as though file.Seek() was used before each write)
+	//	* O_TRUNC: if O_WRONLY or O_RDWR then truncat the file to size 0 on open
+	//	* O_EXCL: error if O_CREAT and the file exists
+	OpenFile(path string, mode int) (file.File, error)
 	// DeleteFile deletes the specified file.  Accepts absolute or relative paths.  Returns an error
 	// if unsuccessful
 	DeleteFile(path string) error

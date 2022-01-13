@@ -120,53 +120,43 @@ func (i *DirectoryInode) AddDirectory(name string) (*DirectoryInode, error) {
 	return subdirInode, nil
 }
 
-// AddFile adds (and returns) a FileInode for a direct child file named 'name'.  It cannot create a
-// with a name containing the path separator and it cannot create a file whose name is already taken
-func (i *DirectoryInode) AddFile(name string) (*FileInode, error) {
-	// Check that this directory entry doesn't contain the path separator
-	if strings.Contains(name, filepath.PathSeparator) {
-		return nil, errors.Wrapf(fserrors.EInval, "cannot add file inode for a name containing path separator %s: %s", filepath.PathSeparator, name)
-	}
-	i.rwMutex.Lock()
-	defer i.rwMutex.Unlock()
-	// Disallow adding files to directories that have already been marked as deleted
-	if i.deleted {
-		return nil, errors.Wrapf(fserrors.ENoEnt, "cannot add entries to a directory marked for deletion")
-	}
-	// Make sure that the entry doesn't already exist
-	if _, exists := i.contents[name]; exists {
-		return nil, errors.Wrapf(fserrors.EExist, "directory entry '%s' already exists", name)
-	}
-	fileInode := NewFileInode()
-	i.contents[name] = fileInode
-	return fileInode, nil
-}
+type onExistFunc func(in Inode, name string) (Inode, error)
+type onNoExistFunc func(di *DirectoryInode, name string) (Inode, error)
 
-// this function is **not thread safe**.  It should only be invoked when a Read-level lock is held
-// on the DirectoryInode
-func (i *DirectoryInode) doInodeEntry(entry string) (Inode, error) {
+// this function is **not thread safe**.  It should be invoked when at least a Read-level lock is held
+// on the DirectoryInode, or a Write-level lock if a mutating onNoExistFunc function is supplied
+func (i *DirectoryInode) getInodeEntry(entry string, onExist onExistFunc, onNoExist onNoExistFunc) (Inode, error) {
 	// Check that this directory entry doesn't contain the path separator
 	if strings.Contains(entry, filepath.PathSeparator) {
 		return nil, errors.Wrapf(fserrors.EInval, "entry %s contains illegal character %s", entry, filepath.PathSeparator)
 	}
 	inode, exists := i.contents[entry]
 	if !exists {
-		return nil, errors.Wrapf(fserrors.ENoEnt, "entry '%s' does not exist", entry)
+		if onNoExist == nil {
+			return nil, errors.Wrapf(fserrors.ENoEnt, "entry '%s' does not exist", entry)
+		} else {
+			return onNoExist(i, entry)
+		}
+	} else {
+		if onExist == nil {
+			return inode, nil
+		} else {
+			return onExist(inode, entry)
+		}
 	}
-	return inode, nil
 }
 
 func (i *DirectoryInode) InodeEntry(entry string) (Inode, error) {
 	i.rwMutex.RLock()
 	defer i.rwMutex.RUnlock()
-	return i.doInodeEntry(entry)
+	return i.getInodeEntry(entry, nil, nil)
 }
 
 // DirectoryInodeEntry obtains the Inode corresponding to the named entry, or an error
 func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, error) {
 	i.rwMutex.RLock()
 	defer i.rwMutex.RUnlock()
-	inode, err := i.doInodeEntry(entry)
+	inode, err := i.getInodeEntry(entry, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +176,41 @@ func (i *DirectoryInode) DirectoryInodeEntry(entry string) (*DirectoryInode, err
 func (i *DirectoryInode) FileInodeEntry(entry string) (*FileInode, error) {
 	i.rwMutex.RLock()
 	defer i.rwMutex.RUnlock()
-	inode, err := i.doInodeEntry(entry)
+	inode, err := i.getInodeEntry(entry, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	fileInode, ok := inode.(*FileInode)
+	if !ok {
+		return nil, errors.Wrapf(fserrors.EIsDir, "entry '%s' is not a file", entry)
+	}
+	return fileInode, nil
+}
+
+func (i *DirectoryInode) CreateFileInodeEntry(entry string, errOnExist bool) (*FileInode, error) {
+	// Check that entry doesn't contain the path separator
+	if strings.Contains(entry, filepath.PathSeparator) {
+		return nil, errors.Wrapf(fserrors.EInval, "name '%s' contains a path separator", entry)
+	}
+	// Take an exclusive lock in case we end up creating a file
+	i.rwMutex.Lock()
+	defer i.rwMutex.Unlock()
+	onExist := func(inode Inode, name string) (Inode, error) {
+		if errOnExist {
+			return nil, errors.Wrapf(fserrors.EExist, "file '%s' already exists", name)
+		} else {
+			return inode, nil
+		}
+	}
+	onNoExist := func(dirInode *DirectoryInode, name string) (Inode, error) {
+		if dirInode.deleted {
+			return nil, errors.Wrapf(fserrors.ENoEnt, "cannot add entries to a directory marked for deletion")
+		}
+		newFileInode := NewFileInode()
+		dirInode.contents[name] = newFileInode
+		return newFileInode, nil
+	}
+	inode, err := i.getInodeEntry(entry, onExist, onNoExist)
 	if err != nil {
 		return nil, err
 	}

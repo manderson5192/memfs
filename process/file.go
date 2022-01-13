@@ -2,23 +2,23 @@ package process
 
 import (
 	"github.com/manderson5192/memfs/file"
+	"github.com/manderson5192/memfs/modes"
 	"github.com/pkg/errors"
 )
 
-func (p *processContext) CreateFile(path string) (file.File, error) {
+func (p *processContext) OpenFile(path string, mode int) (file.File, error) {
 	relativePath, baseDir := p.toCleanRelativePathAndBaseDir(path)
-	f, err := baseDir.CreateFile(relativePath)
+	f, err := baseDir.OpenFile(relativePath, mode)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not create file '%s'", path)
+		return nil, errors.Wrapf(err, "could not open file '%s'", path)
 	}
 	return f, nil
 }
 
-func (p *processContext) OpenFile(path string) (file.File, error) {
-	relativePath, baseDir := p.toCleanRelativePathAndBaseDir(path)
-	f, err := baseDir.OpenFile(relativePath)
+func (p *processContext) CreateFile(path string) (file.File, error) {
+	f, err := p.OpenFile(path, modes.OpenFileModeEqualToCreateFile)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not open file '%s'", path)
+		return nil, errors.Wrapf(err, "could not create file '%s'", path)
 	}
 	return f, nil
 }

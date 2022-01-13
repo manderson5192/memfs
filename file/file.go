@@ -1,11 +1,13 @@
 package file
 
 import (
+	"fmt"
 	"io"
 	"sync"
 
 	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
+	"github.com/manderson5192/memfs/modes"
 	"github.com/pkg/errors"
 )
 
@@ -18,7 +20,7 @@ type File interface {
 	// Equals returns true if the other file is backed by the same FileInode
 	Equals(other File) bool
 	// ReadAll returns a copy of all of the data in the file.  It does not affect the file offset.
-	ReadAll() []byte
+	ReadAll() ([]byte, error)
 	// TruncateAndWriteAll truncates the file and writes in all of the data in buf.  It returns an
 	// error on failure.  It does not affect the file offset
 	TruncateAndWriteAll(buf []byte) error
@@ -41,12 +43,14 @@ type file struct {
 	*inode.FileInode
 	offset int64
 	mutex  sync.Mutex // synchronizes access to this file's offset
+	mode   int
 }
 
-func NewFile(inode *inode.FileInode) File {
+func NewFile(inode *inode.FileInode, mode int) File {
 	return &file{
 		FileInode: inode,
 		offset:    0,
+		mode:      mode,
 	}
 }
 
@@ -61,25 +65,76 @@ func (f *file) Equals(other File) bool {
 	return f.FileInode == otherFile.FileInode
 }
 
+func (f *file) TruncateAndWriteAll(buf []byte) error {
+	if modes.IsReadOnly(f.mode) {
+		return errors.Wrapf(fserrors.EInval, "file is open in read-only mode")
+	}
+	if modes.IsAppendMode(f.mode) {
+		return errors.Wrapf(fserrors.EInval, "file is open in append-only mode")
+	}
+	return f.FileInode.TruncateAndWriteAll(buf)
+}
+
+func (f *file) ReadAll() ([]byte, error) {
+	if modes.IsWriteOnly(f.mode) {
+		return nil, errors.Wrapf(fserrors.EInval, "file is open in write-only mode")
+	}
+	return f.FileInode.ReadAll(), nil
+}
+
+func (f *file) doReadAt(p []byte, off int64) (int, error) {
+	if modes.IsWriteOnly(f.mode) {
+		return 0, errors.Wrapf(fserrors.EInval, "file is open in write-only mode")
+	}
+	n, err := f.FileInode.ReadAt(p, off)
+	return n, err
+}
+
+func (f *file) ReadAt(p []byte, off int64) (int, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	return f.doReadAt(p, off)
+}
+
 func (f *file) Read(p []byte) (int, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
-	n, err := f.ReadAt(p, f.offset)
+	n, err := f.doReadAt(p, f.offset)
 	f.offset += int64(n)
 	return n, err
+}
+
+func (f *file) doWriteAt(p []byte, off int64) (int, error) {
+	if modes.IsReadOnly(f.mode) {
+		return 0, errors.Wrapf(fserrors.EInval, "file is open in read-only mode")
+	}
+	if modes.IsAppendMode(f.mode) {
+		return 0, errors.Wrapf(fserrors.EInval, "file is open in append-only mode")
+	}
+	n, err := f.FileInode.WriteAt(p, off)
+	return n, err
+}
+
+func (f *file) WriteAt(p []byte, off int64) (int, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	return f.doWriteAt(p, off)
 }
 
 func (f *file) Write(p []byte) (int, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
-	n, err := f.WriteAt(p, f.offset)
+	if modes.IsAppendMode(f.mode) {
+		if _, err := f.doSeek(0, io.SeekEnd); err != nil {
+			return 0, fmt.Errorf("failed to seek prior to write for append-only mode")
+		}
+	}
+	n, err := f.doWriteAt(p, f.offset)
 	f.offset += int64(n)
 	return n, err
 }
 
-func (f *file) Seek(offset int64, whence int) (int64, error) {
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
+func (f *file) doSeek(offset int64, whence int) (int64, error) {
 	// interpret whence
 	switch whence {
 	case io.SeekStart:
@@ -96,4 +151,10 @@ func (f *file) Seek(offset int64, whence int) (int64, error) {
 	}
 	f.offset = offset
 	return f.offset, nil
+}
+
+func (f *file) Seek(offset int64, whence int) (int64, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	return f.doSeek(offset, whence)
 }
