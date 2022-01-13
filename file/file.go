@@ -108,9 +108,6 @@ func (f *file) doWriteAt(p []byte, off int64) (int, error) {
 	if modes.IsReadOnly(f.mode) {
 		return 0, errors.Wrapf(fserrors.EInval, "file is open in read-only mode")
 	}
-	if modes.IsAppendMode(f.mode) {
-		return 0, errors.Wrapf(fserrors.EInval, "file is open in append-only mode")
-	}
 	n, err := f.FileInode.WriteAt(p, off)
 	return n, err
 }
@@ -118,6 +115,9 @@ func (f *file) doWriteAt(p []byte, off int64) (int, error) {
 func (f *file) WriteAt(p []byte, off int64) (int, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
+	if modes.IsAppendMode(f.mode) {
+		return 0, errors.Wrapf(fserrors.EInval, "file is open in append-only mode")
+	}
 	return f.doWriteAt(p, off)
 }
 
