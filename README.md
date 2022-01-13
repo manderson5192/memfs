@@ -5,6 +5,10 @@
 This code is written in Go and was developed with Go 1.17.6.  If you don't have Go installed
 already, then please install it from here: https://go.dev/doc/install
 
+## Quick Start
+
+Take a look at [main.go](main.go) and run with `make run`.  Take a look at `ProcessFilesystemContext` in [process.go](process/process.go) to see the avaialble function calls and craft your own program :).
+
 ## Developing, Building, Testing, Running, etc.
 
 For your convenience, this repo includes a Makefile.  It enables you to:
@@ -16,7 +20,27 @@ Development is best done using VSCode with the Go extension (search for `golang.
 
 ## Design
 
-TODO
+MemFS is an in-memory filesystem built around a tree of `inode.DirectoryInode`
+structs that have `inode.DirectoryInode` and `inode.FileInode` children.  The [inode/](inode/) package has the
+code that implements low-level operations on this tree.
+
+Since MemFS is an in-memory filesystem, and since it
+is implemented in Go, it does not have its own allocator for carving inodes out of anonymous blocks of memory
+(all on-disk filesystems need to be able to allocate/deallocate raw on-disk block storage).  Instead, MemFS leans on Go's heap
+allocation and garbage collection.  This is convenient from an implementation standpoint, but also has some neat properties.
+For example, if a file is logically deleted by one goroutine (a simulated Linux "process") while another process has it open,
+that other process is able to continue reading from/writing to the file as long as it wants to, just like in Linux.
+The file's underlying memory won't be cleaned up until the second process deallocates its reference to the file (i.e. "closes" it).  At that point, Go's garbage collector will clean up the now-unused memory backing that file.
+
+Notably, every MemFS inode has a `sync.RWMutex` that is held at Read
+or Write levels, depending on the low-level inode operation.  In general, a Read level lock is held while looking up subdirectories
+or files, while reading file data, or while examining directory entries.  A Write level lock is held while file or directory contents are mutated.
+
+Two packages are implemented on top of the [inode/](inode/) package: [file/](file/) and [directory/](directory/).  Their interfaces
+(`file.File` and `directory.Directory`) are implemented by package-private structs `file.file` and `directory.directory`.  These structs each encapsulate a reference to an inode (`file` also contains an offset, a mode, and a `sync.Mutex` (to synchronize access to the file offset)).  `file.File` and `directory.Directory` are semantically equivalent to a Linux file descriptors: they represent handles used by a single process, and are a layer of indirection on top of the inodes that actually implement underlying storage.
+
+Finally, on top of [file/](file/) and [directory/](directory/) is the [process/](process/) package that exports and implements the
+`process.ProcessFilesystemContext` interface.  `process.ProcessFilesystemContext` is implemented by `process.processContext`, a package-private struct that encapsulates a `filesys.FileSystem` (this interface just provides a reference to the root directory's `directory.Directory`) and a `directory.Directory` for the current working directory.
 
 ## Specifications Met
 ### Basic requirements
