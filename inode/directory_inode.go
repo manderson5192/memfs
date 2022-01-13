@@ -120,11 +120,15 @@ func (i *DirectoryInode) AddDirectory(name string) (*DirectoryInode, error) {
 	return subdirInode, nil
 }
 
-type onExistFunc func(in Inode, name string) (Inode, error)
-type onNoExistFunc func(di *DirectoryInode, name string) (Inode, error)
+type onExistFunc func(child Inode, name string) (Inode, error)
+type onNoExistFunc func(parent *DirectoryInode, name string) (Inode, error)
 
-// this function is **not thread safe**.  It should be invoked when at least a Read-level lock is held
-// on the DirectoryInode, or a Write-level lock if a mutating onNoExistFunc function is supplied
+// getInodeEntry is a convenience method that provides common functionality for getting entry's
+// inode from the receiver DirectoryInode `i`.  It also supports running arbitrary logic when entry
+// is or is not found in i's entry table.
+//
+// This function is **not thread safe**.  It should be invoked by a caller holding a Read-level lock
+// on i's rwMutex, or a Write-level lock if onExist or onNoExistFunc will mutate i's state.
 func (i *DirectoryInode) getInodeEntry(entry string, onExist onExistFunc, onNoExist onNoExistFunc) (Inode, error) {
 	// Check that this directory entry doesn't contain the path separator
 	if strings.Contains(entry, filepath.PathSeparator) {
@@ -146,6 +150,8 @@ func (i *DirectoryInode) getInodeEntry(entry string, onExist onExistFunc, onNoEx
 	}
 }
 
+// InodeEntry holds a Read-level lock on the DirectoryInode and returns the uncasted Inode for the
+// provided entry name, or an error.
 func (i *DirectoryInode) InodeEntry(entry string) (Inode, error) {
 	i.rwMutex.RLock()
 	defer i.rwMutex.RUnlock()
@@ -187,6 +193,9 @@ func (i *DirectoryInode) FileInodeEntry(entry string) (*FileInode, error) {
 	return fileInode, nil
 }
 
+// CreateFileInodeEntry will return a FileInode for i.contents[entry], either by looking up and
+// casting an existing inode, or by creating a new one altogether.  However, if errOnExist is true,
+// then CreateFileInodeEntry will return EEXIST is i.contents[entry] already exists.
 func (i *DirectoryInode) CreateFileInodeEntry(entry string, errOnExist bool) (*FileInode, error) {
 	// Check that entry doesn't contain the path separator
 	if strings.Contains(entry, filepath.PathSeparator) {
@@ -221,6 +230,7 @@ func (i *DirectoryInode) CreateFileInodeEntry(entry string, errOnExist bool) (*F
 	return fileInode, nil
 }
 
+// InodeEntry represents basic information about an entry in a DirectoryInode's entry table
 type InodeEntry struct {
 	Name string
 	Type InodeType
@@ -242,7 +252,7 @@ func (i *DirectoryInode) InodeEntries() []InodeEntry {
 	return toReturn
 }
 
-// Lookup will return a DirectoryInode for the specified subdirectory relative to this
+// LookupSubdirectory will return a DirectoryInode for the specified subdirectory relative to this
 // DirectoryInode.  It assumes that subdirectory is a relative path, even if it begins with a path
 // separator character.  If the specified subdirectory can't be found, or if any named directory
 // entry along its path is not a directory (e.g. if it is a file), then it will return an error.  If
@@ -298,8 +308,11 @@ func (i *DirectoryInode) isDeleted() bool {
 	return i.deleted
 }
 
-// this function is **not thread safe**.  It should only be invoked when a Write-level lock is held
-// on the DirectoryInode
+// doDeleteDirectory is a convenience method that provides common functionality for deleting a child
+// DirectoryInode from `i` that is currently under the entry name `entry`.
+//
+// This function is **not thread safe**.  It should only be invoked when a Write-level lock is held
+// on the DirectoryInode.
 func (i *DirectoryInode) doDeleteDirectory(entry string) error {
 	// Check: disallow removing the special "." and ".." directories
 	if entry == "." || entry == ".." {
@@ -329,7 +342,10 @@ func (i *DirectoryInode) DeleteDirectory(entry string) error {
 	return i.doDeleteDirectory(entry)
 }
 
-// this function is **not thread safe**.  It should only be invoked when a Write-level lock is held
+// doDeleteFile is a convenience method that provides common functionality for deleting a child
+// FileInode from `i` that is currently under the entry name `entry`
+//
+// This function is **not thread safe**.  It should only be invoked when a Write-level lock is held
 // on the DirectoryInode
 func (i *DirectoryInode) doDeleteFile(entry string) error {
 	// Get the FileInode for entry
@@ -352,63 +368,14 @@ func (i *DirectoryInode) DeleteFile(entry string) error {
 	return i.doDeleteFile(entry)
 }
 
-// this function is **not thread safe**.  It should only be invoked when a Write-level lock is held
-// on the DirectoryInode
-func (i *DirectoryInode) doInsertFileInode(entry string, newEntry *FileInode) error {
-	// if an entry by this name already exists, then we are meant to delete it
-	if oldEntry, exists := i.contents[entry]; exists {
-		switch oldEntry.(type) {
-		case *FileInode:
-			if err := i.doDeleteFile(entry); err != nil {
-				return errors.Wrapf(err, "failed to delete existing file")
-			}
-		case *DirectoryInode:
-			if err := i.doDeleteDirectory(entry); err != nil {
-				return errors.Wrapf(err, "failed to delete existing directory")
-			}
-		default:
-			return fmt.Errorf("existing entry '%s' has malformed inode of type '%s'", entry, oldEntry.InodeType().String())
-		}
-	}
-	i.contents[entry] = newEntry
-	return nil
-}
-
-// this function is **not thread safe**.  It should only be invoked when a Write-level lock is held
-// on the DirectoryInode
-func (i *DirectoryInode) doInsertDirectoryInode(entry string, newEntry *DirectoryInode) error {
-	// if an entry by this name already exists, then we are meant to delete it
-	if oldEntry, exists := i.contents[entry]; exists {
-		switch oldEntry.(type) {
-		case *FileInode:
-			// Interestingly, the POSIX spec says that rename(2) should return an error (EISDIR)
-			// if the source ("old") path specifies a directory but the destination ("new") path
-			// coincides with a file.  We could do that here, but it doesn't seem strictly
-			// necessary, so we will allow it.
-			if err := i.doDeleteFile(entry); err != nil {
-				return errors.Wrapf(err, "failed to delete existing file")
-			}
-		case *DirectoryInode:
-			if err := i.doDeleteDirectory(entry); err != nil {
-				return errors.Wrapf(err, "failed to delete existing directory")
-			}
-		default:
-			return fmt.Errorf("existing entry '%s' has malformed inode of type '%s'", entry, oldEntry.InodeType().String())
-		}
-	}
-	// insert the entry into this directory
-	i.contents[entry] = newEntry
-	// update the newEntry inode's parent pointer to point to this inode
-	newEntry.SetParent(i)
-	return nil
-}
-
 func (i *DirectoryInode) SetParent(parent *DirectoryInode) {
 	i.rwMutex.Lock()
 	defer i.rwMutex.Unlock()
 	i.contents[filepath.ParentDirectoryEntry] = parent
 }
 
+// MoveEntry will relocate the inode specified by src that is currently a child of srcParentInode
+// to the entry specified by dst that will be a child of dstParentInode
 func MoveEntry(srcParentInode, dstParentInode *DirectoryInode, src, dst *filepath.PathInfo) error {
 	// Check that srcEntry is not the special self or parent directory entries
 	if src.Entry == filepath.SelfDirectoryEntry || src.Entry == filepath.ParentDirectoryEntry {
@@ -466,6 +433,8 @@ func MoveEntry(srcParentInode, dstParentInode *DirectoryInode, src, dst *filepat
 	return nil
 }
 
+// renameEntry is a special case implementation of MoveEntry where src and dst are both children
+// of a single DirectoryInode `i`
 func (i *DirectoryInode) renameEntry(src, dst *filepath.PathInfo) error {
 	// Special case: do nothing
 	if src.Entry == dst.Entry {
@@ -503,5 +472,64 @@ func (i *DirectoryInode) renameEntry(src, dst *filepath.PathInfo) error {
 		return fmt.Errorf("source entry '%s' has malformed inode of type '%s'", src.Entry, inodeTyped.InodeType().String())
 	}
 	delete(i.contents, src.Entry)
+	return nil
+}
+
+// doInsertFileInode is a convenience method that provides common functionality for inserting
+// FileInode `newEntry` into i's entry table under the entry name `entry`.  If an entry by this name
+// already exists, then this method will delete that inode.
+//
+// This function is **not thread safe**.  It should only be invoked when a Write-level lock is held
+// on the DirectoryInode
+func (i *DirectoryInode) doInsertFileInode(entry string, newEntry *FileInode) error {
+	// if an entry by this name already exists, then we are meant to delete it
+	if oldEntry, exists := i.contents[entry]; exists {
+		switch oldEntry.(type) {
+		case *FileInode:
+			if err := i.doDeleteFile(entry); err != nil {
+				return errors.Wrapf(err, "failed to delete existing file")
+			}
+		case *DirectoryInode:
+			if err := i.doDeleteDirectory(entry); err != nil {
+				return errors.Wrapf(err, "failed to delete existing directory")
+			}
+		default:
+			return fmt.Errorf("existing entry '%s' has malformed inode of type '%s'", entry, oldEntry.InodeType().String())
+		}
+	}
+	i.contents[entry] = newEntry
+	return nil
+}
+
+// doInsertDirectoryInode is a convenience method that provides common functionality for inserting
+// DirectoryInode `newEntry` into i's entry table under the entry name `entry`.  If an entry by this
+// name already exists, then this method will delete that inode.
+//
+// This function is **not thread safe**.  It should only be invoked when a Write-level lock is held
+// on the DirectoryInode
+func (i *DirectoryInode) doInsertDirectoryInode(entry string, newEntry *DirectoryInode) error {
+	// if an entry by this name already exists, then we are meant to delete it
+	if oldEntry, exists := i.contents[entry]; exists {
+		switch oldEntry.(type) {
+		case *FileInode:
+			// Interestingly, the POSIX spec says that rename(2) should return an error (EISDIR)
+			// if the source ("old") path specifies a directory but the destination ("new") path
+			// coincides with a file.  We could do that here, but it doesn't seem strictly
+			// necessary, so we will allow it.
+			if err := i.doDeleteFile(entry); err != nil {
+				return errors.Wrapf(err, "failed to delete existing file")
+			}
+		case *DirectoryInode:
+			if err := i.doDeleteDirectory(entry); err != nil {
+				return errors.Wrapf(err, "failed to delete existing directory")
+			}
+		default:
+			return fmt.Errorf("existing entry '%s' has malformed inode of type '%s'", entry, oldEntry.InodeType().String())
+		}
+	}
+	// insert the entry into this directory
+	i.contents[entry] = newEntry
+	// update the newEntry inode's parent pointer to point to this inode
+	newEntry.SetParent(i)
 	return nil
 }

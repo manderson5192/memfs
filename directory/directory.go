@@ -3,7 +3,6 @@ package directory
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/manderson5192/memfs/file"
 	"github.com/manderson5192/memfs/filepath"
@@ -110,6 +109,7 @@ func NewDirectory(inode *inode.DirectoryInode) Directory {
 	}
 }
 
+// Equals compares two directories on the basis of their underlying inode struct's address in memory
 func (d *directory) Equals(other Directory) bool {
 	if d == nil || other == nil {
 		return false
@@ -121,6 +121,9 @@ func (d *directory) Equals(other Directory) bool {
 	return d.DirectoryInode == otherDir.DirectoryInode
 }
 
+// ReversePathLookup determines the absolute path of the receiver directory `d` by iteratively
+// fetching the parent directory inode (the special ".." entry) and doing a reverse lookup for the
+// child directory inode
 func (d *directory) ReversePathLookup() (string, error) {
 	pathParts := []string{}
 	currentDirInode := d.DirectoryInode
@@ -133,7 +136,7 @@ func (d *directory) ReversePathLookup() (string, error) {
 		pathParts = append([]string{pathPart}, pathParts...)
 		currentDirInode = parentDirInode
 	}
-	path := strings.Join(pathParts, filepath.PathSeparator)
+	path := filepath.Join(pathParts...)
 	return "/" + path, nil
 }
 
@@ -206,6 +209,11 @@ func (d *directory) Rmdir(subdirectory string) error {
 	return nil
 }
 
+// CreateFile is a thin wrapper around OpenFile
+//
+// Note: CreateFile could be removed from the codebase, since it isn't part of the client interface
+// in the process/ module, but it's currently used by a sizable chunk of test code, and I don't have
+// time to refactor that right now :)
 func (d *directory) CreateFile(relativePath string) (file.File, error) {
 	f, err := d.OpenFile(relativePath, modes.OpenFileModeEqualToCreateFile)
 	if err != nil {
@@ -227,7 +235,7 @@ func (d *directory) OpenFile(relativePath string, mode int) (file.File, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not open '%s'", relativePath)
 	}
-	// Get the file
+	// Get the file, creating it if necessary
 	var fileInode *inode.FileInode
 	if modes.IsCreateMode(mode) {
 		fileInode, err = subdirInode.CreateFileInodeEntry(pathInfo.Entry, modes.IsExclusiveMode(mode))

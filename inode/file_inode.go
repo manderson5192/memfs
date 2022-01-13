@@ -74,8 +74,10 @@ func (i *FileInode) ReadAt(p []byte, off int64) (int, error) {
 	numBytesToRead := utils.Min(bytesAfterOffset, numBytesRequested)
 	copy(p, i.data[intOff:intOff+numBytesToRead])
 	var err error = error(nil)
-	// If the number of bytes read is fewer than the number requested, then we read up to
+	// If the number of bytes read is fewer than the number requested, then we need to return EOF
 	if numBytesToRead < numBytesRequested {
+		// We use io.EOF b/c this error constant is required by the io.ReaderAt interface we are
+		// trying to implement
 		err = io.EOF
 	}
 	return numBytesToRead, err

@@ -2,6 +2,7 @@ package inode
 
 import "sync"
 
+// InodeType is an enum that indicates whether an inode is a file or a directory
 type InodeType int
 
 const (
@@ -10,8 +11,12 @@ const (
 	InodeDirectory
 )
 
+// Inode represents a filesystem inode ("index node") and is implemented by one of two types:
+// *DirectoryInode and *FileInode
 type Inode interface {
 	InodeType() InodeType
+	// Size will return the number of bytes in a FileInode's data buffer or the number of entries
+	// in a DirectoryInode's entry table
 	Size() int
 }
 

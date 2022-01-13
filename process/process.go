@@ -7,6 +7,8 @@ import (
 	"github.com/manderson5192/memfs/filesys"
 )
 
+// ProcessFilesystemContext is an interface that closely resembles the POSIX filesystem interface
+// that is available to Linux processes
 type ProcessFilesystemContext interface {
 	// WorkingDirectory gets the process's current working directory
 	WorkingDirectory() (string, error)
@@ -78,6 +80,8 @@ type processContext struct {
 	workdir    directory.Directory
 }
 
+// NewProcessFilesystemContext creates a processContext, which encapsulates a FileSystem, knowledge
+// of the current working directoy, and an implementation of the ProcessFilesystemContext interface
 func NewProcessFilesystemContext(fs filesys.FileSystem) ProcessFilesystemContext {
 	return &processContext{
 		fileSystem: fs,
