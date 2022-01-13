@@ -8,7 +8,7 @@ import (
 	"github.com/manderson5192/memfs/filepath"
 	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
-	"github.com/manderson5192/memfs/modes"
+	"github.com/manderson5192/memfs/os"
 	"github.com/pkg/errors"
 )
 
@@ -215,7 +215,7 @@ func (d *directory) Rmdir(subdirectory string) error {
 // in the process/ module, but it's currently used by a sizable chunk of test code, and I don't have
 // time to refactor that right now :)
 func (d *directory) CreateFile(relativePath string) (file.File, error) {
-	f, err := d.OpenFile(relativePath, modes.OpenFileModeEqualToCreateFile)
+	f, err := d.OpenFile(relativePath, os.OpenFileModeEqualToCreateFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not create '%s'", relativePath)
 	}
@@ -237,8 +237,8 @@ func (d *directory) OpenFile(relativePath string, mode int) (file.File, error) {
 	}
 	// Get the file, creating it if necessary
 	var fileInode *inode.FileInode
-	if modes.IsCreateMode(mode) {
-		fileInode, err = subdirInode.CreateFileInodeEntry(pathInfo.Entry, modes.IsExclusiveMode(mode))
+	if os.IsCreateMode(mode) {
+		fileInode, err = subdirInode.CreateFileInodeEntry(pathInfo.Entry, os.IsExclusiveMode(mode))
 	} else {
 		fileInode, err = subdirInode.FileInodeEntry(pathInfo.Entry)
 	}
@@ -246,7 +246,7 @@ func (d *directory) OpenFile(relativePath string, mode int) (file.File, error) {
 		return nil, errors.Wrapf(err, "could not open %s", relativePath)
 	}
 	// Truncate the file if the mode says to do so
-	if modes.IsTruncateMode(mode) {
+	if os.IsTruncateMode(mode) {
 		err := fileInode.TruncateAndWriteAll(make([]byte, 0))
 		if err != nil {
 			return nil, errors.Wrapf(err, "could not truncate %s on open", relativePath)

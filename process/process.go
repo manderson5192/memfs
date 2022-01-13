@@ -34,7 +34,7 @@ type ProcessFilesystemContext interface {
 	CreateFile(path string) (file.File, error)
 	// OpenFile opens the specified file in the specified mode and returns a reference to it.
 	// Accepts absolute or relative paths.  Returns nil and an error if unsuccessful.  It supports
-	// the following modes, which can be OR'd together (as with open(2) in Linux):
+	// the following os, which can be OR'd together (as with open(2) in Linux):
 	//	* O_RDONLY: open in read-only mode
 	//	* O_WRONLY: open in write-only mode
 	//	* O_RDWR: open in read/write mode

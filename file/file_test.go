@@ -10,7 +10,7 @@ import (
 	"github.com/manderson5192/memfs/filesys"
 	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
-	"github.com/manderson5192/memfs/modes"
+	"github.com/manderson5192/memfs/os"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -33,11 +33,11 @@ func (s *FileTestSuite) SetupTest() {
 
 func (s *FileTestSuite) TestEquals() {
 	aInode := inode.NewFileInode()
-	aFile := file.NewFile(aInode, modes.CombineModes(modes.O_RDWR))
-	aOtherFile := file.NewFile(aInode, modes.CombineModes(modes.O_RDWR))
+	aFile := file.NewFile(aInode, os.CombineModes(os.O_RDWR))
+	aOtherFile := file.NewFile(aInode, os.CombineModes(os.O_RDWR))
 
 	bInode := inode.NewFileInode()
-	bFile := file.NewFile(bInode, modes.CombineModes(modes.O_RDWR))
+	bFile := file.NewFile(bInode, os.CombineModes(os.O_RDWR))
 
 	assert.True(s.T(), aFile.Equals(aFile), "file is equal to itself")
 	assert.True(s.T(), aFile.Equals(aOtherFile), "a file is equal to another file ref'ing the same inode")
@@ -54,7 +54,7 @@ func (s *FileTestSuite) TestEquals() {
 // * WriterAt
 // * Seeker
 func (s *FileTestSuite) TestImplementsInterfaces() {
-	file := file.NewFile(inode.NewFileInode(), modes.CombineModes(modes.O_RDWR))
+	file := file.NewFile(inode.NewFileInode(), os.CombineModes(os.O_RDWR))
 	var _ io.Reader = file
 	var _ io.Writer = file
 	var _ io.ReaderAt = file

@@ -2,7 +2,7 @@ package process
 
 import (
 	"github.com/manderson5192/memfs/file"
-	"github.com/manderson5192/memfs/modes"
+	"github.com/manderson5192/memfs/os"
 	"github.com/pkg/errors"
 )
 
@@ -16,7 +16,7 @@ func (p *processContext) OpenFile(path string, mode int) (file.File, error) {
 }
 
 func (p *processContext) CreateFile(path string) (file.File, error) {
-	f, err := p.OpenFile(path, modes.OpenFileModeEqualToCreateFile)
+	f, err := p.OpenFile(path, os.OpenFileModeEqualToCreateFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not create file '%s'", path)
 	}

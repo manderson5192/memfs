@@ -10,7 +10,7 @@ import (
 
 	"github.com/manderson5192/memfs/filesys"
 	"github.com/manderson5192/memfs/fserrors"
-	"github.com/manderson5192/memfs/modes"
+	"github.com/manderson5192/memfs/os"
 	"github.com/manderson5192/memfs/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -40,7 +40,7 @@ func (s *WorkflowTestSuite) SetupTest() {
 
 func (s *WorkflowTestSuite) TestFileAccessWorksAfterDeletion() {
 	// Open foobar_file
-	f, err := s.p.OpenFile("/a/foobar_file", modes.CombineModes(modes.O_RDWR))
+	f, err := s.p.OpenFile("/a/foobar_file", os.CombineModes(os.O_RDWR))
 	assert.Nil(s.T(), err)
 
 	// Delete foobar_file
@@ -82,7 +82,7 @@ func (s *WorkflowTestSuite) TestFileAccessWorksAfterDeletion() {
 
 func (s *WorkflowTestSuite) TestFileAccessWorksThroughRename() {
 	// Open foobar_file
-	f1, err := s.p.OpenFile("/a/foobar_file", modes.CombineModes(modes.O_RDWR))
+	f1, err := s.p.OpenFile("/a/foobar_file", os.CombineModes(os.O_RDWR))
 	assert.Nil(s.T(), err)
 
 	// Move foobar_file
@@ -90,7 +90,7 @@ func (s *WorkflowTestSuite) TestFileAccessWorksThroughRename() {
 	assert.Nil(s.T(), err)
 
 	// Reopen foobar_file in its new location
-	f2, err := s.p.OpenFile("/a/b/foobar_file", modes.CombineModes(modes.O_RDWR))
+	f2, err := s.p.OpenFile("/a/b/foobar_file", os.CombineModes(os.O_RDWR))
 	assert.Nil(s.T(), err)
 
 	// Both f1 and f2 contain the initial contents
@@ -114,7 +114,7 @@ func (s *WorkflowTestSuite) TestManyConcurrentFileAccesses() {
 		wg.Add(1)
 		go func(o int, r rune) {
 			// Open foobar_file
-			f, err := s.p.OpenFile("/a/foobar_file", modes.CombineModes(modes.O_RDWR))
+			f, err := s.p.OpenFile("/a/foobar_file", os.CombineModes(os.O_RDWR))
 			assert.Nil(s.T(), err)
 
 			// Sleep for a random number of milliseconds between 0 and 100
@@ -134,7 +134,7 @@ func (s *WorkflowTestSuite) TestManyConcurrentFileAccesses() {
 	wg.Wait()
 
 	// Verify that the resultant file is what we expect
-	f, err := s.p.OpenFile("/a/foobar_file", modes.CombineModes(modes.O_RDWR))
+	f, err := s.p.OpenFile("/a/foobar_file", os.CombineModes(os.O_RDWR))
 	assert.Nil(s.T(), err)
 	data, err := f.ReadAll()
 	assert.Nil(s.T(), err)

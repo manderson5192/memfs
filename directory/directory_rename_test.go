@@ -6,7 +6,7 @@ import (
 	"github.com/manderson5192/memfs/directory"
 	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
-	"github.com/manderson5192/memfs/modes"
+	"github.com/manderson5192/memfs/os"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -78,7 +78,7 @@ func (s *DirectoryRenameTestSuite) TestRenameSameDirectory() {
 	}, entries)
 
 	// Make sure that the file in c is available under c_newname
-	fileInCNewName, err := s.RootDir.OpenFile("a/b/c_newname/a_file", modes.CombineModes(modes.O_RDWR))
+	fileInCNewName, err := s.RootDir.OpenFile("a/b/c_newname/a_file", os.CombineModes(os.O_RDWR))
 	assert.Nil(s.T(), err)
 	assert.True(s.T(), fileInCNewName.Equals(fileInC))
 }
@@ -117,7 +117,7 @@ func (s *DirectoryRenameTestSuite) TestRenameOverEmptyDirSameDirectory() {
 	}, entries)
 
 	// Make sure that the file in c is available under c_newname
-	fileInCNewName, err := s.RootDir.OpenFile("a/b/foobar/a_file", modes.CombineModes(modes.O_RDWR))
+	fileInCNewName, err := s.RootDir.OpenFile("a/b/foobar/a_file", os.CombineModes(os.O_RDWR))
 	assert.Nil(s.T(), err)
 	assert.True(s.T(), fileInCNewName.Equals(fileInC))
 }
@@ -207,12 +207,12 @@ func (s *DirectoryRenameTestSuite) TestRenameOverFileSameDirectory() {
 	}, entries)
 
 	// Make sure that the file in c is available under some_file
-	fileInCNewName, err := s.RootDir.OpenFile("a/b/some_file/a_file", modes.CombineModes(modes.O_RDWR))
+	fileInCNewName, err := s.RootDir.OpenFile("a/b/some_file/a_file", os.CombineModes(os.O_RDWR))
 	assert.Nil(s.T(), err)
 	assert.True(s.T(), fileInCNewName.Equals(fileInC))
 
 	// Verify that /a/b/some_file was deleted
-	_, err = s.BSubdir.OpenFile("some_file", modes.CombineModes(modes.O_RDWR))
+	_, err = s.BSubdir.OpenFile("some_file", os.CombineModes(os.O_RDWR))
 	assert.NotNil(s.T(), err)
 	assert.ErrorIs(s.T(), err, fserrors.EIsDir)
 }
@@ -242,7 +242,7 @@ func (s *DirectoryRenameTestSuite) TestRenameFile() {
 	assert.Empty(s.T(), entries)
 
 	// Verify that some_file is in the root directory now
-	someFileInRoot, err := s.RootDir.OpenFile("some_file", modes.CombineModes(modes.O_RDWR))
+	someFileInRoot, err := s.RootDir.OpenFile("some_file", os.CombineModes(os.O_RDWR))
 	assert.Nil(s.T(), err)
 	assert.True(s.T(), someFile.Equals(someFileInRoot))
 }
@@ -294,7 +294,7 @@ func (s *DirectoryRenameTestSuite) TestRenameDirectory() {
 	assert.Contains(s.T(), entries, directory.DirectoryEntry{Name: "c", Type: directory.DirectoryType})
 
 	// Verify that some_file is under /c now
-	someFileInRoot, err := s.RootDir.OpenFile("./c/some_file", modes.CombineModes(modes.O_RDWR))
+	someFileInRoot, err := s.RootDir.OpenFile("./c/some_file", os.CombineModes(os.O_RDWR))
 	assert.Nil(s.T(), err)
 	assert.True(s.T(), someFile.Equals(someFileInRoot))
 }

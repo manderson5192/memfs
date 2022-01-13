@@ -7,7 +7,7 @@ import (
 
 	"github.com/manderson5192/memfs/fserrors"
 	"github.com/manderson5192/memfs/inode"
-	"github.com/manderson5192/memfs/modes"
+	"github.com/manderson5192/memfs/os"
 	"github.com/pkg/errors"
 )
 
@@ -66,24 +66,24 @@ func (f *file) Equals(other File) bool {
 }
 
 func (f *file) TruncateAndWriteAll(buf []byte) error {
-	if modes.IsReadOnly(f.mode) {
+	if os.IsReadOnly(f.mode) {
 		return errors.Wrapf(fserrors.EInval, "file is open in read-only mode")
 	}
-	if modes.IsAppendMode(f.mode) {
+	if os.IsAppendMode(f.mode) {
 		return errors.Wrapf(fserrors.EInval, "file is open in append-only mode")
 	}
 	return f.FileInode.TruncateAndWriteAll(buf)
 }
 
 func (f *file) ReadAll() ([]byte, error) {
-	if modes.IsWriteOnly(f.mode) {
+	if os.IsWriteOnly(f.mode) {
 		return nil, errors.Wrapf(fserrors.EInval, "file is open in write-only mode")
 	}
 	return f.FileInode.ReadAll(), nil
 }
 
 func (f *file) doReadAt(p []byte, off int64) (int, error) {
-	if modes.IsWriteOnly(f.mode) {
+	if os.IsWriteOnly(f.mode) {
 		return 0, errors.Wrapf(fserrors.EInval, "file is open in write-only mode")
 	}
 	n, err := f.FileInode.ReadAt(p, off)
@@ -105,7 +105,7 @@ func (f *file) Read(p []byte) (int, error) {
 }
 
 func (f *file) doWriteAt(p []byte, off int64) (int, error) {
-	if modes.IsReadOnly(f.mode) {
+	if os.IsReadOnly(f.mode) {
 		return 0, errors.Wrapf(fserrors.EInval, "file is open in read-only mode")
 	}
 	n, err := f.FileInode.WriteAt(p, off)
@@ -115,7 +115,7 @@ func (f *file) doWriteAt(p []byte, off int64) (int, error) {
 func (f *file) WriteAt(p []byte, off int64) (int, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
-	if modes.IsAppendMode(f.mode) {
+	if os.IsAppendMode(f.mode) {
 		return 0, errors.Wrapf(fserrors.EInval, "file is open in append-only mode")
 	}
 	return f.doWriteAt(p, off)
@@ -124,7 +124,7 @@ func (f *file) WriteAt(p []byte, off int64) (int, error) {
 func (f *file) Write(p []byte) (int, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
-	if modes.IsAppendMode(f.mode) {
+	if os.IsAppendMode(f.mode) {
 		if _, err := f.doSeek(0, io.SeekEnd); err != nil {
 			return 0, fmt.Errorf("failed to seek prior to write for append-only mode")
 		}

@@ -1,26 +1,28 @@
-package modes
+package os
 
-import "os"
+import (
+	golang_os "os"
+)
 
 const (
 	// Copying these values from Go's os module for convenience.  This is not, strictly speaking,
 	// the most cross-platform-friendly choice.
-	O_RDONLY = os.O_RDONLY
-	O_WRONLY = os.O_WRONLY
-	O_RDWR   = os.O_RDWR
-	O_CREATE = os.O_CREATE
-	O_APPEND = os.O_APPEND
-	O_TRUNC  = os.O_TRUNC
-	O_EXCL   = os.O_EXCL
+	O_RDONLY = golang_os.O_RDONLY
+	O_WRONLY = golang_os.O_WRONLY
+	O_RDWR   = golang_os.O_RDWR
+	O_CREATE = golang_os.O_CREATE
+	O_APPEND = golang_os.O_APPEND
+	O_TRUNC  = golang_os.O_TRUNC
+	O_EXCL   = golang_os.O_EXCL
 )
 
 const (
 	OpenFileModeEqualToCreateFile = O_RDWR | O_CREATE | O_EXCL
 )
 
-func CombineModes(modes ...int) int {
+func CombineModes(os ...int) int {
 	toReturn := 0
-	for _, mode := range modes {
+	for _, mode := range os {
 		toReturn = toReturn | mode
 	}
 	return toReturn

@@ -5,7 +5,7 @@ import (
 
 	"github.com/manderson5192/memfs/directory"
 	"github.com/manderson5192/memfs/fserrors"
-	"github.com/manderson5192/memfs/modes"
+	"github.com/manderson5192/memfs/os"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,7 +16,7 @@ func (s *ProcessTestSuite) TestCreateFileWithTrailingSlash() {
 }
 
 func (s *ProcessTestSuite) TestOpenFileWithTrailingSlash() {
-	_, err := s.p.OpenFile("/a/foobar_file/", modes.CombineModes(modes.O_RDWR))
+	_, err := s.p.OpenFile("/a/foobar_file/", os.CombineModes(os.O_RDWR))
 	assert.NotNil(s.T(), err)
 	assert.ErrorIs(s.T(), err, fserrors.EInval)
 }
@@ -51,7 +51,7 @@ func (s *ProcessTestSuite) TestDeleteFileOnDirectory() {
 }
 
 func (s *ProcessTestSuite) TestOpenFileReadOnly() {
-	f, err := s.p.OpenFile("/a/foobar_file", modes.O_RDONLY|modes.O_CREATE)
+	f, err := s.p.OpenFile("/a/foobar_file", os.O_RDONLY|os.O_CREATE)
 	assert.Nil(s.T(), err)
 
 	// Try writing to the file a few different ways -- all should fail with EINVAL
@@ -78,7 +78,7 @@ func (s *ProcessTestSuite) TestOpenFileReadOnly() {
 }
 
 func (s *ProcessTestSuite) TestOpenFileWriteOnly() {
-	f, err := s.p.OpenFile("/a/foobar_file", modes.O_WRONLY)
+	f, err := s.p.OpenFile("/a/foobar_file", os.O_WRONLY)
 	assert.Nil(s.T(), err)
 
 	// Verify that reading is not possible.  It should result in EINVAL.
@@ -95,7 +95,7 @@ func (s *ProcessTestSuite) TestOpenFileWriteOnly() {
 }
 
 func (s *ProcessTestSuite) TestOpenFileAppend() {
-	f, err := s.p.OpenFile("/a/foobar_file", modes.O_RDWR|modes.O_APPEND)
+	f, err := s.p.OpenFile("/a/foobar_file", os.O_RDWR|os.O_APPEND)
 	assert.Nil(s.T(), err)
 
 	// Verify that WriteAt() and TruncateAndWriteAll() result in EINVAL
@@ -127,7 +127,7 @@ func (s *ProcessTestSuite) TestOpenFileAppend() {
 }
 
 func (s *ProcessTestSuite) TestOpenFileTruncate() {
-	f, err := s.p.OpenFile("/a/foobar_file", modes.O_RDWR|modes.O_TRUNC)
+	f, err := s.p.OpenFile("/a/foobar_file", os.O_RDWR|os.O_TRUNC)
 	assert.Nil(s.T(), err)
 	data, err := f.ReadAll()
 	assert.Nil(s.T(), err)
@@ -135,21 +135,21 @@ func (s *ProcessTestSuite) TestOpenFileTruncate() {
 }
 
 func (s *ProcessTestSuite) TestOpenFileCreateFileDNE() {
-	_, err := s.p.OpenFile("/a/does_not_exist.txt", modes.O_RDWR|modes.O_CREATE)
+	_, err := s.p.OpenFile("/a/does_not_exist.txt", os.O_RDWR|os.O_CREATE)
 	assert.Nil(s.T(), err)
 }
 
 func (s *ProcessTestSuite) TestOpenFileCreateFileExists() {
-	_, err := s.p.OpenFile("/a/foobar_file", modes.O_RDWR|modes.O_CREATE)
+	_, err := s.p.OpenFile("/a/foobar_file", os.O_RDWR|os.O_CREATE)
 	assert.Nil(s.T(), err)
 }
 
 func (s *ProcessTestSuite) TestOpenFileCreateExclusiveFileDNE() {
-	_, err := s.p.OpenFile("/a/does_not_exist.txt", modes.O_RDWR|modes.O_CREATE|modes.O_EXCL)
+	_, err := s.p.OpenFile("/a/does_not_exist.txt", os.O_RDWR|os.O_CREATE|os.O_EXCL)
 	assert.Nil(s.T(), err)
 }
 
 func (s *ProcessTestSuite) TestOpenFileCreateExclusiveFileExists() {
-	_, err := s.p.OpenFile("/a/foobar_file", modes.O_RDWR|modes.O_CREATE|modes.O_EXCL)
+	_, err := s.p.OpenFile("/a/foobar_file", os.O_RDWR|os.O_CREATE|os.O_EXCL)
 	assert.ErrorIs(s.T(), err, fserrors.EExist)
 }
