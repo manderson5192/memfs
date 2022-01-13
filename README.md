@@ -34,7 +34,8 @@ TODO
 ### Extensions
 
 * Move and copy
-    - [x] You can move ~~or copy~~ files and directories (note: a `cp` command can be implemented with the provided syscalls)
+    - [x] You can move ~~or copy~~ files and directories
+        * NOTE: a `cp` command can be implemented with the provided syscalls
     - [ ] Support merging the contents of two directories when moving or copying one into
 the other.
     - [ ] Handle name collisions in some way (e.g. auto renaming files, merging
