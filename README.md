@@ -42,8 +42,8 @@ Two packages are implemented on top of the [inode/](inode/) package: [file/](fil
 Finally, on top of [file/](file/) and [directory/](directory/) is the [process/](process/) package that exports and implements the
 `process.ProcessFilesystemContext` interface.  `process.ProcessFilesystemContext` is implemented by `process.processContext`, a package-private struct that encapsulates a `filesys.FileSystem` (this interface just provides a reference to the root directory's `directory.Directory`) and a `directory.Directory` for the current working directory.
 
-## Specifications Met
-### Basic requirements
+## Features
+### Basic Capabilities
 - [x] Change the current working directory: `process.WorkingDirectory()`
 - [x] Get the current working directory: `process.ChangeDirectory()`
 - [x] Create a new directory: `process.MakeDirectory()`
@@ -55,7 +55,7 @@ Finally, on top of [file/](file/) and [directory/](directory/) is the [process/]
 - [x] Move a file: `process.Rename()`
 - [x] Find a file/directory: `process.FindAll()`
 
-### Extensions
+### Extended Capabilities
 
 * Move and copy
     - [x] You can move ~~or copy~~ files and directories

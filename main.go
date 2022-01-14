@@ -16,7 +16,7 @@ func main() {
 	// an interface for running actions on the filesystem
 	p := process.NewProcessFilesystemContext(fs)
 
-	// The commands below implement the "example operations" from the take-home assignment write-up
+	// Perform a simple example workflow
 	err := p.MakeDirectory("school")
 	handleError(err)
 
